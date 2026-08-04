@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Solar{% endblock %}
+
+{% block head %}
+<script src="/static/vendor/plotly.min.js"></script>
+<style>
+.controls {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+.controls a { color: var(--series-1); text-decoration: none; }
+.controls .sep { color: var(--grid); }
+#chart { width: 100%; height: 420px; }
+details { margin-top: 0.5rem; }
+summary { cursor: pointer; color: var(--ink-2); font-size: 0.9rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>ADU solar production</h1>
+
+<div class="controls">
+  <a href="?date={{ prev_day|date:'Y-m-d' }}&range={{ range }}">← prev</a>
+  <strong>{{ day|date:"D M j, Y" }}{% if range == 'week' %} (week ending){% endif %}</strong>
+  {% if day < today %}<a href="?date={{ next_day|date:'Y-m-d' }}&range={{ range }}">next →</a>{% endif %}
+  <span class="sep">|</span>
+  {% if range == 'week' %}
+    <a href="?date={{ day|date:'Y-m-d' }}&range=day">day</a> · <strong>week</strong>
+  {% else %}
+    <strong>day</strong> · <a href="?date={{ day|date:'Y-m-d' }}&range=week">week</a>
+  {% endif %}
+  {% if day != today %}<span class="sep">|</span><a href="?">today</a>{% endif %}
+</div>
+
+<div class="card">
+  <div id="chart"></div>
+  <p class="small muted" style="margin-bottom:0">
+    Breaks in the line are intervals with no data — unknown, not zero.
+  </p>
+</div>
+
+{% if hours %}
+<details class="card">
+  <summary>Hourly energy table</summary>
+  <table class="data" style="margin-top: 0.75rem">
+    <tr><th>Hour</th><th>Energy (Wh)</th><th>Coverage</th></tr>
+    {% for h in hours %}
+    <tr>
+      <td>{{ h.hour|date:"H:i" }}</td>
+      <td>{% if h.coverage_pct > 0 %}{{ h.wh|floatformat:0 }}{% else %}—{% endif %}</td>
+      <td>{% if h.coverage_pct < 99.9 and h.coverage_pct > 0 %}{{ h.coverage_pct|floatformat:0 }}%{% elif h.coverage_pct == 0 %}unknown{% else %}100%{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</details>
+{% endif %}
+
+<script>
+const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+const ink2 = dark ? "#c3c2b7" : "#52514e";
+const grid = dark ? "#2c2c2a" : "#e1e0d9";
+const baseline = dark ? "#383835" : "#c3c2b7";
+const seriesColors = {
+  production_w: dark ? "#3987e5" : "#2a78d6",
+  consumption_w: dark ? "#d95926" : "#eb6834",
+};
+
+fetch("{% url 'catalog:solar_data' %}?date={{ day|date:'Y-m-d' }}&range={{ range }}")
+  .then((r) => r.json())
+  .then(({ traces }) => {
+    const plotTraces = traces.map((t) => ({
+      x: t.x,
+      y: t.y,
+      name: t.name,
+      type: "scatter",
+      mode: "lines",
+      connectgaps: false, // gaps render as gaps — the whole point
+      line: {
+        width: 2,
+        color: seriesColors[t.metric] || (dark ? "#199e70" : "#1baf7a"),
+        // coarse sources look coarse: stepped, never smoothed
+        shape: t.stepped ? "hv" : "linear",
+      },
+      hovertemplate: "%{y:.0f} W · %{x|%H:%M}<extra>" + t.metric + "</extra>",
+    }));
+    const layout = {
+      margin: { l: 55, r: 15, t: 10, b: 40 },
+      paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: "system-ui, sans-serif", size: 12, color: ink2 },
+      xaxis: { gridcolor: grid, linecolor: baseline, zeroline: false },
+      yaxis: {
+        title: { text: "W" },
+        gridcolor: grid,
+        linecolor: baseline,
+        zerolinecolor: baseline,
+        rangemode: "tozero",
+      },
+      // legend only when >1 series; a single series is named by the page title
+      showlegend: plotTraces.length > 1,
+      legend: { orientation: "h", y: 1.08 },
+      hovermode: "x unified",
+    };
+    Plotly.newPlot("chart", plotTraces, layout, {
+      displayModeBar: false,
+      responsive: true,
+    });
+  });
+</script>
+{% endblock %}

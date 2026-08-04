@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Data health{% endblock %}
+
+{% block head %}
+<style>
+.freshness {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.freshness.fresh { color: var(--status-good); }
+.freshness.stale { color: var(--status-critical); }
+.source-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+.series-row {
+  display: grid;
+  grid-template-columns: 11rem 1fr 4.5rem;
+  gap: 0.75rem;
+  align-items: center;
+  margin: 0.4rem 0;
+}
+.series-label { font-size: 0.85rem; color: var(--ink-2); }
+.covered { font-size: 0.85rem; color: var(--ink-2); text-align: right; font-variant-numeric: tabular-nums; }
+.track {
+  position: relative;
+  height: 14px;
+  background: var(--page);
+  border: 1px solid var(--grid);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.track .span { position: absolute; top: 0; bottom: 0; }
+.track .span.live { background: var(--cov-live); }
+.track .span.backfilled { background: var(--cov-backfilled); }
+.track .span.confirmed_empty { background: var(--cov-empty); }
+.legend {
+  display: flex;
+  gap: 1.25rem;
+  margin: 0.25rem 0 1rem;
+  font-size: 0.85rem;
+  color: var(--ink-2);
+}
+.legend .chip {
+  display: inline-block;
+  width: 14px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 0.35rem;
+}
+.legend .chip.unknown { background: var(--page); border: 1px solid var(--grid); }
+.axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 0.5rem;
+}
+.failures { margin: 0.75rem 0 0; padding: 0; list-style: none; font-size: 0.85rem; }
+.failures li { color: var(--ink-2); }
+.failures .when { color: var(--muted); font-variant-numeric: tabular-nums; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Data health</h1>
+
+<div class="legend">
+  <span><span class="chip" style="background: var(--cov-live)"></span>live</span>
+  <span><span class="chip" style="background: var(--cov-backfilled)"></span>backfilled</span>
+  <span><span class="chip" style="background: var(--cov-empty)"></span>confirmed empty</span>
+  <span><span class="chip unknown"></span>unknown</span>
+</div>
+
+{% for row in sources %}
+<section class="card">
+  <div class="source-head">
+    <h2>{{ row.source.name }}</h2>
+    {% if row.stale %}
+      <span class="freshness stale">✕ stale</span>
+    {% else %}
+      <span class="freshness fresh">● fresh</span>
+    {% endif %}
+  </div>
+
+  {% for sr in row.series_rows %}
+  <div class="series-row">
+    <span class="series-label">{{ sr.series.metric }}</span>
+    <div class="track">
+      {% for span in sr.spans %}
+      <div class="span {{ span.state }}"
+           style="left: {{ span.left_pct|floatformat:3 }}%; width: {{ span.width_pct|floatformat:3 }}%"></div>
+      {% endfor %}
+    </div>
+    <span class="covered">{{ sr.covered_pct|floatformat:1 }}%</span>
+  </div>
+  {% empty %}
+  <p class="muted small">No series yet — nothing collected from this source.</p>
+  {% endfor %}
+
+  <div class="axis">
+    <span>{{ window_start|date:"M j H:i" }}</span>
+    <span>{{ window_days }} days</span>
+    <span>now ({{ now|date:"M j H:i" }})</span>
+  </div>
+
+  <p class="small muted" style="margin-bottom: 0">
+    {% if row.last_sample %}
+      Last sample {{ row.last_sample.ts|timesince }} ago
+      ({{ row.last_sample.ts|date:"M j H:i:s" }})
+    {% else %}
+      No samples yet
+    {% endif %}
+    · polls every {{ row.source.poll_interval_s }}s
+  </p>
+
+  {% if row.failures %}
+  <ul class="failures">
+    {% for run in row.failures %}
+    <li><span class="when">{{ run.started|date:"M j H:i" }}</span> — {{ run.message|truncatechars:120 }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% empty %}
+<p class="muted">No sources yet. Start the collector: <code>uv run python manage.py serve</code></p>
+{% endfor %}
+{% endblock %}

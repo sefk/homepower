@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}homepower{% endblock %} · 635 Central</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --baseline: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.10);
+  --series-1: #2a78d6;   /* production */
+  --series-2: #eb6834;   /* consumption */
+  --status-good: #0ca30c;
+  --status-critical: #d03b3b;
+  --cov-live: #0ca30c;
+  --cov-backfilled: #2a78d6;
+  --cov-empty: #c3c2b7;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --baseline: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --cov-backfilled: #3987e5;
+    --cov-empty: #383835;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+header {
+  display: flex;
+  align-items: baseline;
+  gap: 1.5rem;
+  padding: 0.9rem 1.5rem;
+  border-bottom: 1px solid var(--grid);
+}
+header .brand { font-weight: 650; }
+header nav { display: flex; gap: 1rem; }
+header nav a {
+  color: var(--ink-2);
+  text-decoration: none;
+  padding: 0.1rem 0;
+}
+header nav a.active {
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom: 2px solid var(--series-1);
+}
+main { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
+h1 { font-size: 1.25rem; margin: 0 0 1rem; }
+h2 { font-size: 1rem; margin: 0; }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+.muted { color: var(--muted); }
+.small { font-size: 0.85rem; }
+table.data { border-collapse: collapse; font-size: 0.85rem; }
+table.data th, table.data td {
+  text-align: right;
+  padding: 0.25rem 0.75rem;
+  border-bottom: 1px solid var(--grid);
+  font-variant-numeric: tabular-nums;
+}
+table.data th { color: var(--ink-2); font-weight: 600; }
+table.data td:first-child, table.data th:first-child { text-align: left; }
+</style>
+{% block head %}{% endblock %}
+</head>
+<body>
+<header>
+  <span class="brand">635 Central</span>
+  <nav>
+    <a href="{% url 'catalog:health' %}" class="{% if section == 'health' %}active{% endif %}">Data health</a>
+    <a href="{% url 'catalog:solar' %}" class="{% if section == 'solar' %}active{% endif %}">Solar</a>
+  </nav>
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>
