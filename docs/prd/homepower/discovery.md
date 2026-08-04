@@ -7,7 +7,7 @@ Tags: `[confirmed]` = read in code/data/on the wire, or user said it. `[assumed]
 - `[confirmed]` This work is happening *on* `studio`: Mac Studio, Apple M1 Max (`T6000`), Darwin 25.5.0, arm64, `10.10.0.200`.
 - `[confirmed]` Docker Desktop 29.4.2 is installed and running. Existing containers: `postgres:17` up 4 days (belongs to another project, `datatalk`), plus stopped `grafana`, `prometheus`, `otel-collector`, and an OpenLibrary dev stack.
 - `[confirmed]` `uv` and `python3` present at `/opt/homebrew/bin`.
-- `[confirmed]` Repo `/Users/sefk/src/homepower` has **no commits**. Contents are `homepower-PRD.md` and `635-central-energy-analysis-gemini.md` only. Nothing has been built.
+- `[confirmed]` Repo `/Users/sefk/src/homepower` has **no commits**. Contents are the original one-page brief (since superseded by `prd.md`) and `docs/635-central-energy-analysis-gemini.md` only. Nothing has been built.
 - `[confirmed]` A Synology NAS lives at `10.10.0.250`, and `sefklon-vm` / `buddy` (locally-administered MACs, so VMs) at `.251` / `.253`. There are always-on alternatives to studio on this LAN.
 - `[assumed]` studio is a daily-driver desktop, not a headless server. Docker Desktop on macOS needs a logged-in GUI session, does not auto-start reliably after reboot, and the VM stops when macOS sleeps. Any 24/7 collector on this host inherits those gaps.
 

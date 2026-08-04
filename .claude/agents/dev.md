@@ -17,7 +17,7 @@ You are a software developer on the 635 Central Home Power Monitor: a self-hoste
 
 ## Project context
 
-Read `docs/prd/homepower/prd.md` for the full brief and `docs/prd/homepower/discovery.md` for how the decisions were reached. `635-central-energy-analysis-gemini.md` has the bill analysis the project is arguing with. Key technical points:
+Read `docs/prd/homepower/prd.md` for the full brief and `docs/prd/homepower/discovery.md` for how the decisions were reached. `docs/635-central-energy-analysis-gemini.md` has the bill analysis the project is arguing with. Key technical points:
 
 - **Language:** Python (uv package manager)
 - **Framework:** Django, one project, one process
