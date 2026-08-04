@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Secrets and runtime state
+.env
+var/
+db.sqlite3
+db.sqlite3-*
+
+# Tooling
+.pytest_cache/
+.tmp/
