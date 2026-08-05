@@ -14,7 +14,7 @@ Check it:
 
 ```sh
 launchctl print gui/$(id -u)/com.sefk.homepower | head -20
-curl -s http://localhost:8000/
+curl -s http://localhost:8425/
 ```
 
 Stop / restart:

@@ -92,7 +92,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # --- homepower ---
 
 SERVE_HOST = os.environ.get("HOMEPOWER_HOST", "0.0.0.0")
-SERVE_PORT = int(os.environ.get("HOMEPOWER_PORT", "8000"))
+SERVE_PORT = int(os.environ.get("HOMEPOWER_PORT", "8425"))
 
 # Enphase Envoy (ADU solar). Credentials are Enlighten cloud login, used
 # only to mint/refresh the local-API JWT (firmware D7+ requirement).

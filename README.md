@@ -41,7 +41,7 @@ uv run python manage.py serve --no-collect   # UI only (development)
 uv run pytest                                # test suite
 ```
 
-Then http://localhost:8000/ — the catalog:
+Then http://localhost:8425/ — the catalog:
 
 - `/health/` — per-source coverage timeline, freshness, recent failures
 - `/solar/` — ADU production, day/week, gaps rendered as gaps
