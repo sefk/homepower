@@ -29,6 +29,25 @@ launchctl bootout gui/$(id -u)/com.sefk.homepower        # stop + unload
 - `var/log/homepower.log` — application log (rotating, 5×10MB)
 - `var/log/launchd.out.log`, `var/log/launchd.err.log` — process stdout/stderr
 
+## macOS Local Network privacy (one-time)
+
+LAN access is granted per-binary on modern macOS. Your terminal has it,
+but the launchd-run python is silently denied — every Envoy connection
+fails with `errno 65, No route to host` while internet requests
+succeed. (Apple's own binaries like `curl` are exempt, which makes this
+maddening to diagnose.)
+
+Fix, once, in the GUI: **System Settings → Privacy & Security →
+Local Network**, enable the **python** / **uv** entry (it appears after
+the service has attempted LAN access), then:
+
+```sh
+launchctl kickstart -k gui/$(id -u)/com.sefk.homepower
+```
+
+Expect to redo this if the python interpreter path changes (e.g. a uv
+python upgrade).
+
 ## Notes
 
 - `KeepAlive` restarts the process if either the web server or the
