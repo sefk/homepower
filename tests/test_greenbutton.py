@@ -80,6 +80,18 @@ CORRECTED_QUARTER_CSV = """TYPE,DATE,START TIME,END TIME,USAGE,UNITS,COST
 Electric usage,08/05/2025,00:00,00:15,1.000,kWh,$0.62
 """
 
+# A daily-granularity row, later partly corrected by an hourly one at a
+# DIFFERENT ts (inside the day, not at its 00:00 start) -- the case
+# where update_or_create's exact-(series, ts) key can't find the row it
+# should really be replacing.
+DAILY_ROW_CSV = """TYPE,DATE,START TIME,END TIME,USAGE,UNITS,COST
+Electric usage,08/06/2025,00:00,00:00,24.000,kWh,$0.00
+"""
+
+CORRECTED_HOUR_INSIDE_DAY_CSV = """TYPE,DATE,START TIME,END TIME,USAGE,UNITS,COST
+Electric usage,08/06/2025,05:00,06:00,2.000,kWh,$0.00
+"""
+
 
 def _write(tmp_path, name, content):
     path = tmp_path / name
@@ -439,10 +451,15 @@ class TestGridHourlyWh:
 @pytest.mark.django_db
 class TestClearCoverageOnReimport:
     def test_one_hour_correction_does_not_erase_the_rest_of_the_month(self, tmp_path):
-        """A one-hour correction file must only revise its own hour. The
-        blunt "delete every BACKFILLED span the file's range intersects"
-        bug nuked an entire multi-day span for a one-hour touch, leaving
-        the rest of the month unknown until re-backfilled from scratch."""
+        """A one-hour correction file must only revise what it actually
+        describes. The blunt "delete every BACKFILLED span the file's
+        range intersects" bug nuked an entire multi-day span for a
+        one-hour touch; clear_coverage scopes retraction to what's
+        actually being revised. Day 3's correction lands at a DIFFERENT
+        ts than the daily row it partly supersedes (05:00 vs the daily
+        row's 00:00), so that whole daily reading is invalidated (it was
+        one atomic value, now known partly wrong) and the rest of day 3
+        reverts to unknown -- but days 1, 2, 4, and 5 are untouched."""
         month = _write(tmp_path, "month.csv", _daily_rows_csv("07/01/2026", 5, daily_kwh=24.0))
         call_command("import_greenbutton", month)
 
@@ -455,18 +472,72 @@ class TestClearCoverageOnReimport:
         corrected = _write(tmp_path, "corrected_hour.csv", _single_hour_csv("07/03/2026", 5, 0.750))
         call_command("import_greenbutton", corrected)
 
-        # Nothing outside the corrected hour became unknown.
-        assert uncovered(series, month_start, month_end) == []
+        # Day 3's daily reading is invalidated outside the corrected hour
+        # -- the other four days are untouched.
+        day3_hour_start = utc(2026, 7, 3, 12, 0)  # 05:00 PDT
+        day3_hour_end = utc(2026, 7, 3, 13, 0)
+        assert uncovered(series, month_start, month_end) == [
+            (utc(2026, 7, 3, 7, 0), day3_hour_start),
+            (day3_hour_end, utc(2026, 7, 4, 7, 0)),
+        ]
 
-        # The corrected hour actually reflects the new file -- proof it
-        # was really rebuilt, not just coincidentally left alone.
-        corrected_ts = utc(2026, 7, 3, 12, 0)  # 05:00 PDT
-        sample = Sample.objects.get(series=series, ts=corrected_ts)
+        # The corrected hour actually reflects the new file.
+        sample = Sample.objects.get(series=series, ts=day3_hour_start)
         assert sample.value == pytest.approx(750.0)
         assert sample.duration_s == 3600
+
+        # The old day-3 daily sample is gone -- not just shadowed.
+        assert not Sample.objects.filter(series=series, ts=utc(2026, 7, 3, 7, 0)).exists()
 
         # A day the correction never touched keeps its original reading.
         untouched_ts = utc(2026, 7, 1, 7, 0)
         untouched = Sample.objects.get(series=series, ts=untouched_ts)
         assert untouched.value == pytest.approx(24000.0)
         assert untouched.duration_s == 86400
+
+
+@pytest.mark.django_db
+class TestOverlappingDifferentTsSample:
+    def test_hourly_correction_inside_a_daily_row_removes_the_daily_sample(self, tmp_path):
+        """The daily row's ts (00:00) differs from the corrected hour's ts
+        (05:00), so update_or_create's exact-(series, ts) key can't find
+        it. Without deleting the old overlapping sample, both the daily
+        reading and the corrected hour would exist side by side, and
+        _clipped_energy_wh would double-count: the daily sample's full
+        proportional slice, plus the new hourly value, while coverage
+        looked completely intact."""
+        daily = _write(tmp_path, "daily.csv", DAILY_ROW_CSV)
+        call_command("import_greenbutton", daily)
+
+        hourly = _write(tmp_path, "hourly.csv", CORRECTED_HOUR_INSIDE_DAY_CSV)
+        call_command("import_greenbutton", hourly)
+
+        series = Series.objects.get(metric="grid_import_wh")
+        # The daily sample is gone -- not shadowed, not double-counted.
+        assert Sample.objects.filter(series=series).count() == 1
+        sample = Sample.objects.get(series=series)
+        assert sample.ts == utc(2025, 8, 6, 12, 0)  # 05:00 PDT
+        assert sample.value == pytest.approx(2000.0)
+        assert sample.duration_s == 3600
+
+        day_start = utc(2025, 8, 6, 7, 0)  # 00:00 PDT
+        day_end = utc(2025, 8, 7, 7, 0)
+        hour_start = utc(2025, 8, 6, 12, 0)
+        hour_end = utc(2025, 8, 6, 13, 0)
+
+        # The remainder of the day reads unknown -- not zero, and not
+        # still "known" via a sample that no longer exists.
+        assert uncovered(series, day_start, day_end) == [
+            (day_start, hour_start),
+            (hour_end, day_end),
+        ]
+
+        # Totals only count what's actually covered: the corrected hour,
+        # not the deleted daily reading it used to double-count against.
+        result = grid_hourly_wh(hour_start, hour_end)
+        assert result.imported_wh == pytest.approx(2000.0)
+        assert result.coverage == pytest.approx(1.0)
+
+        untouched_hour = grid_hourly_wh(day_start, day_start + timedelta(hours=1))
+        assert untouched_hour.imported_wh == 0.0
+        assert untouched_hour.coverage == 0.0
