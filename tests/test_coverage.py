@@ -92,3 +92,14 @@ class TestAggregation:
         result = energy_wh(series, utc(2026, 8, 1, 10, 0), utc(2026, 8, 1, 12, 0))
         assert result.wh == pytest.approx(1000.0)
         assert result.coverage == pytest.approx(0.5)  # the hole is visible, not zero-filled
+
+    def test_straddling_sample_split_at_window_boundary(self, series):
+        """A sample spanning an hour boundary charges each hour only its
+        overlap — 45s at 10:59:30 puts 30s in hour 10 and 15s in hour 11."""
+        Sample.objects.create(
+            series=series, ts=utc(2026, 8, 1, 10, 59, 30), duration_s=45, value=1200.0
+        )
+        hour10 = energy_wh(series, utc(2026, 8, 1, 10, 0), utc(2026, 8, 1, 11, 0))
+        hour11 = energy_wh(series, utc(2026, 8, 1, 11, 0), utc(2026, 8, 1, 12, 0))
+        assert hour10.wh == pytest.approx(1200.0 * 30 / 3600)
+        assert hour11.wh == pytest.approx(1200.0 * 15 / 3600)
