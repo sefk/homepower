@@ -47,6 +47,10 @@ class Collector(ABC):
     kind: str
     poll_interval_s: int
     native_resolution_s: int
+    # Metrics whose consecutive readings bridge coverage regardless of the
+    # gap between them. Correct only for cumulative registers, where the
+    # difference of two readings is exact knowledge of the whole interval.
+    always_bridge: frozenset[str] = frozenset()
 
     def __init__(self):
         self._source: Source | None = None
@@ -101,7 +105,10 @@ class Collector(ABC):
                 defaults={"duration_s": r.duration_s, "value": r.value},
             )
             prev = self._last_ts.get(r.metric)
-            start = prev if prev is not None and r.ts - prev <= grace else r.ts
+            bridge = prev is not None and (
+                r.metric in self.always_bridge or r.ts - prev <= grace
+            )
+            start = prev if bridge else r.ts
             record_coverage(
                 series, start, r.ts + timedelta(seconds=r.duration_s), CoverageSpan.State.LIVE
             )

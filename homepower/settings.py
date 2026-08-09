@@ -101,6 +101,15 @@ ENPHASE_USERNAME = os.environ.get("ENPHASE_USERNAME", "")
 ENPHASE_PASSWORD = os.environ.get("ENPHASE_PASSWORD", "")
 ENPHASE_TOKEN_FILE = VAR_DIR / "enphase_token.json"
 
+# Rainforest Eagle 3 (grid). It pushes to /ingest/eagle/; the creds are
+# only for configuring the device / its local API, never for ingest.
+EAGLE_HOST = os.environ.get("EAGLE_HOST", "10.10.0.216")
+EAGLE_CLOUD_ID = os.environ.get("EAGLE_CLOUD_ID", "")
+EAGLE_INSTALL_CODE = os.environ.get("EAGLE_INSTALL_CODE", "")
+# Nominal push cadence: drives native resolution, staleness (3x) and
+# demand-coverage grace (2x).
+EAGLE_NOMINAL_INTERVAL_S = int(os.environ.get("EAGLE_NOMINAL_INTERVAL_S", "15"))
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
