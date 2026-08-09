@@ -378,8 +378,12 @@ def trueup_data(request):
         # A cycle is complete when it closed with an April bill, not merely
         # because a later cycle exists — if the dataset's newest bill IS
         # that April closer, this is still the last entry in `cycles` and
-        # must still report its outcome.
-        complete = cycle[-1].end_date.month == 4
+        # must still report its outcome. Both boundaries must hold: a
+        # dataset truncated mid-cycle (say Jan..April) ends in April but
+        # is a partial sum, not a closed true-up outcome.
+        complete = (
+            cycle[-1].end_date.month == 4 and cycle[0].end_date.month == 5
+        )
         cum_kwh, cum_dollars = [], []
         running_kwh = running_dollars = 0.0
         for period in cycle:

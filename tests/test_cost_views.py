@@ -139,6 +139,21 @@ class TestTrueupData:
         assert data["outcome"]["net_kwh"] == pytest.approx(1439)
         assert data["outcome"]["nem_charges"] == pytest.approx(458.26)
 
+    def test_truncated_first_cycle_is_not_a_closed_outcome(self, db, client):
+        # History retained only from January to the April closer: ends at
+        # the boundary but is a partial sum, never a true-up outcome.
+        from billing.data import ELECTRIC_BILLS
+
+        for row in ELECTRIC_BILLS[8:12]:  # Jan..Apr 2026 periods only
+            end_date, peak_kwh, offpeak_kwh, net_kwh, nem_charges = row
+            BillPeriod.objects.create(
+                end_date=end_date, peak_kwh=peak_kwh, offpeak_kwh=offpeak_kwh,
+                net_kwh=net_kwh, nem_charges=nem_charges,
+            )
+        data = client.get("/trueup/data.json").json()
+        assert data["cycles"][0]["complete"] is False
+        assert data["outcome"] is None
+
     def test_no_bills_yields_no_outcome(self, db, client):
         data = client.get("/trueup/data.json").json()
         assert data["cycles"] == []
