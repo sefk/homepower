@@ -24,6 +24,12 @@ STALE_POLLS = 3
 HEALTH_WINDOW_DAYS = 7
 PEAK_TABLE_DAYS = 7  # /peak/ live table: trailing days from Eagle data
 COSTMAP_DAYS = 30  # /costmap/ heatmap: trailing days
+# A heatmap cell can't show a coverage percentage the way the hourly
+# tables do, so a partially-covered hour must be blank rather than show
+# the cost of just the observed portion — otherwise an outage would
+# quietly read as a cheap hour instead of a missing one. 0.99 (not 1.0)
+# tolerates a collector's own rounding of interval boundaries.
+COSTMAP_MIN_COVERAGE = 0.99
 
 # Analysis catalog for the index page (PRD: the catalog is the product).
 # Each entry states the one-sentence question it answers, not a chart type.
@@ -368,8 +374,12 @@ def trueup_data(request):
 
     traces = []
     outcome = None
-    for i, cycle in enumerate(cycles):
-        complete = i < len(cycles) - 1  # every cycle but the last has closed
+    for cycle in cycles:
+        # A cycle is complete when it closed with an April bill, not merely
+        # because a later cycle exists — if the dataset's newest bill IS
+        # that April closer, this is still the last entry in `cycles` and
+        # must still report its outcome.
+        complete = cycle[-1].end_date.month == 4
         cum_kwh, cum_dollars = [], []
         running_kwh = running_dollars = 0.0
         for period in cycle:
@@ -463,7 +473,8 @@ def peak_data(request):
 
 def costmap(request):
     """Which hours cost the money? Hour x day heatmap of import cost,
-    bill-derived rates applied; uncovered hours are blank, never zero."""
+    bill-derived rates applied; uncovered or partially-covered hours are
+    blank, never zero."""
     return render(request, "catalog/costmap.html", {"section": "catalog"})
 
 
@@ -480,7 +491,8 @@ def costmap_data(request):
             for h in range(24):
                 h_start = day_start + timedelta(hours=h)
                 result = energy_wh_split(series, h_start, h_start + timedelta(hours=1))
-                if result.coverage > 0:  # coverage == 0 stays null, never zero
+                # partial coverage stays null too — see COSTMAP_MIN_COVERAGE
+                if result.coverage >= COSTMAP_MIN_COVERAGE:
                     z[h][di] = result.imported_wh / 1000 * rate_for(h_start)
 
     return JsonResponse(

@@ -78,6 +78,22 @@ class TestCycles:
         assert cycle_label(cycles[0]) == "2025–26"
         assert cycle_label(cycles[1]) == "2026–27"
 
+    def test_label_when_cycle_starts_in_may(self):
+        cycle = [BillPeriod(end_date=date(2025, 5, 13))]
+        assert cycle_label(cycle) == "2025–26"
+
+    def test_label_when_truncated_cycle_starts_jan_to_april(self):
+        # A dataset that only retains the tail of a cycle can start with a
+        # Jan-April period; it still belongs to the cycle that opened the
+        # previous May, so the label's start year is one less than the
+        # period's own calendar year.
+        cycle = [BillPeriod(end_date=date(2026, 1, 14))]
+        assert cycle_label(cycle) == "2025–26"
+
+    def test_label_boundary_at_april_vs_may(self):
+        assert cycle_label([BillPeriod(end_date=date(2026, 4, 15))]) == "2025–26"
+        assert cycle_label([BillPeriod(end_date=date(2026, 5, 14))]) == "2026–27"
+
 
 class TestTrueupData:
     def test_two_cycles_overlaid_with_known_outcome(self, db, client):
@@ -100,6 +116,26 @@ class TestTrueupData:
         assert current["months"] == [1, 2, 3]  # 3 periods so far
 
         assert data["outcome"]["label"] == "2025–26"
+        assert data["outcome"]["net_kwh"] == pytest.approx(1439)
+        assert data["outcome"]["nem_charges"] == pytest.approx(458.26)
+
+    def test_dataset_ending_on_the_april_closer_still_reports_outcome(self, db, client):
+        # If the newest bill IS the April true-up bill, that cycle is still
+        # the last entry `true_up_cycles` returns — completeness must come
+        # from its own end_date, not from "a later cycle exists".
+        from billing.data import ELECTRIC_BILLS
+
+        for end_date, peak_kwh, offpeak_kwh, net_kwh, nem_charges in ELECTRIC_BILLS[:12]:
+            BillPeriod.objects.create(
+                end_date=end_date,
+                peak_kwh=peak_kwh,
+                offpeak_kwh=offpeak_kwh,
+                net_kwh=net_kwh,
+                nem_charges=nem_charges,
+            )
+        data = client.get("/trueup/data.json").json()
+        assert len(data["cycles"]) == 1
+        assert data["cycles"][0]["complete"] is True
         assert data["outcome"]["net_kwh"] == pytest.approx(1439)
         assert data["outcome"]["nem_charges"] == pytest.approx(458.26)
 
@@ -180,6 +216,25 @@ class TestCostmapData:
         data = client.get("/costmap/data.json").json()
         assert len(data["z"]) == 24
         assert all(v is None for row in data["z"] for v in row)
+
+    def test_partially_covered_hour_is_null_not_undercounted(
+        self, grid_series, client, monkeypatch
+    ):
+        # Only the first half of the hour has samples/coverage. Without a
+        # coverage floor this would render as a real — and misleadingly
+        # cheap — dollar figure instead of the outage it actually is.
+        frozen_today = date(2026, 7, 15)
+        monkeypatch.setattr("catalog.views.timezone.localdate", lambda: frozen_today)
+
+        hour_start = la(2026, 7, 15, 10, 0)
+        Sample.objects.create(series=grid_series, ts=hour_start, duration_s=1800, value=2000.0)
+        record_coverage(
+            grid_series, hour_start, hour_start + timedelta(minutes=30), CoverageSpan.State.LIVE
+        )
+
+        data = client.get("/costmap/data.json").json()
+        di = data["days"].index("2026-07-15")
+        assert data["z"][10][di] is None
 
     def test_summer_rate_applied(self, grid_series, client, monkeypatch):
         frozen_today = date(2026, 7, 15)  # July: summer

@@ -30,6 +30,14 @@ def true_up_cycles(periods: list[BillPeriod]) -> list[list[BillPeriod]]:
 
 
 def cycle_label(cycle: list[BillPeriod]) -> str:
-    """e.g. '2025–26' for a cycle whose first period ends May 2025."""
-    year0 = cycle[0].end_date.year
-    return f"{year0}–{(year0 + 1) % 100:02d}"
+    """e.g. '2025–26' for a cycle whose first period ends May 2025.
+
+    A cycle normally starts with a May-ending period, but a truncated
+    dataset can retain a cycle from partway through (its first period
+    landing Jan-April) — that period still belongs to the cycle that
+    started the previous May, so the label's start year is one less than
+    its calendar year in that case.
+    """
+    first = cycle[0].end_date
+    start_year = first.year if first.month >= 5 else first.year - 1
+    return f"{start_year}–{(start_year + 1) % 100:02d}"
