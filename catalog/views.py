@@ -151,8 +151,11 @@ def _traces(series_qs, start, end):
             series=series, ts__gte=start, ts__lt=end
         ).order_by("ts")
         for s in samples.iterator():
-            if prev_ts is not None and (s.ts - prev_ts).total_seconds() > 2 * resolution:
-                # a hole: break the line, never bridge it
+            # A missed interval puts consecutive samples exactly 2x the
+            # resolution apart — that boundary is already a hole, so break
+            # at >= rather than >. Jittered-but-adjacent samples sit well
+            # under it.
+            if prev_ts is not None and (s.ts - prev_ts).total_seconds() >= 2 * resolution:
                 xs.append(None)
                 ys.append(None)
             xs.append(s.ts.astimezone(tz).strftime("%Y-%m-%d %H:%M:%S"))

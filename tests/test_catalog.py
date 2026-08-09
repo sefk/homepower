@@ -60,6 +60,14 @@ class TestSolarData:
         resp = client.get("/solar/data.json?date=2026-08-01")
         assert resp.json()["traces"][0]["stepped"] is False
 
+    def test_single_missed_interval_breaks_line(self, series, client):
+        """Samples exactly 2x resolution apart = one missing interval — the
+        line must break there, not draw across the unknown stretch."""
+        Sample.objects.create(series=series, ts=utc(2026, 8, 1, 10, 0), duration_s=60, value=100.0)
+        Sample.objects.create(series=series, ts=utc(2026, 8, 1, 10, 2), duration_s=60, value=120.0)
+        trace = client.get("/solar/data.json?date=2026-08-01").json()["traces"][0]
+        assert trace["y"].count(None) == 1
+
     def test_bad_date_404s(self, db, client):
         assert client.get("/solar/data.json?date=nope").status_code == 404
 
