@@ -196,6 +196,17 @@ class Command(BaseCommand):
             )
             if prev_naive is not None and start_naive <= prev_naive:
                 fold = 1
+            elif (
+                fold
+                and prev_naive is not None
+                and start_naive - prev_naive > timedelta(hours=1)
+            ):
+                # Jumped clean past the ambiguous hour (rows inside a
+                # second pass advance by at most the interval, <= 1h) —
+                # covers a file whose very next row lands in a LATER
+                # fall-back's repeated hour, where the ambiguity check
+                # below wouldn't release the latch.
+                fold = 0
             if not ambiguous:
                 fold = 0
             prev_naive = start_naive
