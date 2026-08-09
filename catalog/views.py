@@ -18,7 +18,7 @@ from billing.cycles import cycle_label, true_up_cycles
 from billing.models import BillPeriod, GasBillPeriod
 from billing.rates import PEAK_END_HOUR, PEAK_START_HOUR, rate_for, rates_for
 from core import coverage
-from core.aggregate import energy_wh, energy_wh_split
+from core.aggregate import energy_wh, grid_hourly_wh, has_grid_data
 from core.models import CollectorRun, Sample, Series, Source
 
 # A source is stale when it has been silent this many poll intervals.
@@ -350,17 +350,20 @@ def solar_data(request):
 
 
 def grid(request):
-    """Whole-home grid demand; hourly import/export table twin rides along."""
+    """Whole-home grid demand; hourly import/export table twin rides along.
+
+    The table uses grid_hourly_wh (demand_w, or the Green Button backfill
+    when that's all there is); the chart below stays demand_w-only via
+    grid_data — a line chart of interval energy samples doesn't mean
+    anything, so Green Button data never appears there.
+    """
     day, span, days, start, end = _window(request)
 
     hours = []
-    series = Series.objects.filter(
-        source__kind=Source.Kind.GRID, metric="demand_w"
-    ).first()
-    if series and days == 1:
+    if has_grid_data() and days == 1:
         for h in range(24):
             h_start = start + timedelta(hours=h)
-            result = energy_wh_split(series, h_start, h_start + timedelta(hours=1))
+            result = grid_hourly_wh(h_start, h_start + timedelta(hours=1))
             hours.append(
                 {
                     "hour": h_start,
@@ -439,7 +442,7 @@ def trueup_data(request):
     return JsonResponse({"cycles": traces, "outcome": outcome})
 
 
-def _peak_offpeak_wh(series: Series, local_day, tz):
+def _peak_offpeak_wh(local_day, tz):
     """Imported Wh and coverage for a local day, split at the 4-9pm window.
 
     Off-peak is two sub-windows (midnight-4pm, 9pm-midnight); their imported
@@ -452,15 +455,18 @@ def _peak_offpeak_wh(series: Series, local_day, tz):
     two datetimes sharing the same tzinfo object subtract by wall clock in
     Python, so on a DST transition day dur_morning/dur_evening would be off
     by an hour (docs/REVIEW-INSIGHTS.md "DST is a standing adversary").
+
+    Uses grid_hourly_wh, not a specific Series, so a Green Button-only
+    period (no Eagle 3 data at all) still populates this table.
     """
     day_start = datetime.combine(local_day, time.min, tzinfo=tz)
     peak_start = datetime.combine(local_day, time(hour=PEAK_START_HOUR), tzinfo=tz)
     peak_end = datetime.combine(local_day, time(hour=PEAK_END_HOUR), tzinfo=tz)
     next_day_start = day_start + timedelta(days=1)
 
-    peak = energy_wh_split(series, peak_start, peak_end)
-    off_morning = energy_wh_split(series, day_start, peak_start)
-    off_evening = energy_wh_split(series, peak_end, next_day_start)
+    peak = grid_hourly_wh(peak_start, peak_end)
+    off_morning = grid_hourly_wh(day_start, peak_start)
+    off_evening = grid_hourly_wh(peak_end, next_day_start)
 
     dur_morning = (coverage._utc(peak_start) - coverage._utc(day_start)).total_seconds()
     dur_evening = (coverage._utc(next_day_start) - coverage._utc(peak_end)).total_seconds()
@@ -485,11 +491,10 @@ def peak(request):
     today = timezone.localdate()
     days = [today - timedelta(days=i) for i in range(PEAK_TABLE_DAYS - 1, -1, -1)]
 
-    series = Series.objects.filter(source__kind=Source.Kind.GRID, metric="demand_w").first()
     rows = []
-    if series:
+    if has_grid_data():
         for day in days:
-            peak_wh, peak_cov, offpeak_wh, offpeak_cov = _peak_offpeak_wh(series, day, tz)
+            peak_wh, peak_cov, offpeak_wh, offpeak_cov = _peak_offpeak_wh(day, tz)
             peak_rate, offpeak_rate = rates_for(day)
             rows.append(
                 {
@@ -541,14 +546,13 @@ def costmap_data(request):
     today = timezone.localdate()
     days = [today - timedelta(days=i) for i in range(COSTMAP_DAYS - 1, -1, -1)]
 
-    series = Series.objects.filter(source__kind=Source.Kind.GRID, metric="demand_w").first()
     z = [[None] * len(days) for _ in range(24)]
-    if series:
+    if has_grid_data():
         for di, day in enumerate(days):
             day_start = datetime.combine(day, time.min, tzinfo=tz)
             for h in range(24):
                 h_start = day_start + timedelta(hours=h)
-                result = energy_wh_split(series, h_start, h_start + timedelta(hours=1))
+                result = grid_hourly_wh(h_start, h_start + timedelta(hours=1))
                 # partial coverage stays null too — see COSTMAP_MIN_COVERAGE
                 if result.coverage >= COSTMAP_MIN_COVERAGE:
                     z[h][di] = result.imported_wh / 1000 * rate_for(h_start)
@@ -667,7 +671,7 @@ def electrify_data(request):
     )
 
 
-def _selfuse_day(day, tz, solar_series, grid_series):
+def _selfuse_day(day, tz, solar_series, has_grid):
     """generation/export/self-use for one local day, or None if either
     side's coverage misses SELFUSE_MIN_COVERAGE -- never a partial number
     passed off as the whole day."""
@@ -687,8 +691,10 @@ def _selfuse_day(day, tz, solar_series, grid_series):
 
     grid_coverage = 0.0
     exported_wh = 0.0
-    if grid_series:
-        split = energy_wh_split(grid_series, day_start, day_end)
+    if has_grid:
+        # grid_hourly_wh, not a specific Series: a Green Button-only
+        # period still has an export figure to compare against generation.
+        split = grid_hourly_wh(day_start, day_end)
         exported_wh = split.exported_wh
         grid_coverage = split.coverage
 
@@ -756,12 +762,12 @@ def selfuse_data(request):
     solar_series = list(
         Series.objects.filter(source__kind=Source.Kind.SOLAR, metric="production_w")
     )
-    grid_series = Series.objects.filter(source__kind=Source.Kind.GRID, metric="demand_w").first()
+    has_grid = has_grid_data()
 
     labels, self_used, exported, fractions = [], [], [], []
     for day in days:
         labels.append(day.isoformat())
-        result = _selfuse_day(day, tz, solar_series, grid_series)
+        result = _selfuse_day(day, tz, solar_series, has_grid)
         self_used.append(result["self_used_wh"] if result else None)
         exported.append(result["exported_wh"] if result else None)
         fractions.append(result["fraction"] if result else None)

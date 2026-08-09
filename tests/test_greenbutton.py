@@ -1,7 +1,7 @@
 """Green Button CSV import: header scanning, column variants, duration
 inference, DST fold, idempotency, coverage, and grid_hourly_wh."""
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytest
 from django.core.management import call_command
@@ -62,11 +62,40 @@ Electric usage,08/03/2025,00:15,not-a-number,kWh,$0.00
 Electric usage,08/03/2025,00:45,0.100,kWh,$0.06
 """
 
+# The interval itself straddles the fall-back: START 01:45 in the first
+# (PDT) pass, END "01:00" meaning 01:00 in the second (PST) pass — same
+# wall-clock digits as the start's, but 15 real minutes later, not a
+# midnight wrap almost a day away.
+DST_STRADDLE_CSV = """TYPE,DATE,START TIME,END TIME,USAGE,UNITS,COST
+Electric usage,11/02/2025,01:45,01:00,0.100,kWh,$0.06
+"""
+
+# First import: no END TIME, one row -> falls back to the 1-hour default.
+UNCORRECTED_HOUR_CSV = """TYPE,DATE,START TIME,USAGE,UNITS,COST
+Electric usage,08/05/2025,00:00,1.000,kWh,$0.62
+"""
+
+# Re-import of the same reading, corrected to its real 15-minute interval.
+CORRECTED_QUARTER_CSV = """TYPE,DATE,START TIME,END TIME,USAGE,UNITS,COST
+Electric usage,08/05/2025,00:00,00:15,1.000,kWh,$0.62
+"""
+
 
 def _write(tmp_path, name, content):
     path = tmp_path / name
     path.write_text(content)
     return str(path)
+
+
+def _full_day_single_usage_csv(date_str, hourly_kwh=0.500):
+    """24 hourly single-USAGE rows covering a full local day -- enough
+    coverage for both the peak (4-9pm) and off-peak sub-windows."""
+    lines = ["TYPE,DATE,START TIME,END TIME,USAGE,UNITS,COST"]
+    for h in range(24):
+        start = f"{h:02d}:00"
+        end = f"{(h + 1) % 24:02d}:00"
+        lines.append(f"Electric usage,{date_str},{start},{end},{hourly_kwh:.3f},kWh,$0.00")
+    return "\n".join(lines) + "\n"
 
 
 @pytest.mark.django_db
@@ -167,6 +196,17 @@ class TestDstFallback:
         assert samples[0].ts == utc(2025, 11, 2, 8, 0)
         assert samples[1].ts == utc(2025, 11, 2, 9, 0)
 
+    def test_interval_straddling_the_transition_is_15_minutes_not_a_day(self, tmp_path):
+        """START 01:45 (PDT) -> END "01:00" (PST) is a real 15-minute
+        interval, not a midnight wrap: the wall clock falls back exactly
+        inside it. Naively treating end <= start as a midnight wrap here
+        would push the end a full day forward instead of 15 minutes."""
+        path = _write(tmp_path, "dst_straddle.csv", DST_STRADDLE_CSV)
+        call_command("import_greenbutton", path)
+
+        sample = Sample.objects.get(series__metric="grid_import_wh")
+        assert sample.duration_s == 900
+
 
 @pytest.mark.django_db
 class TestGapRowDoesNotStretchNeighborDuration:
@@ -203,6 +243,96 @@ class TestGarbageFile:
         with pytest.raises(CommandError):
             call_command("import_greenbutton", path)
         assert Sample.objects.count() == 0
+
+
+@pytest.mark.django_db
+class TestCorrectedReimport:
+    def test_stale_backfilled_coverage_is_replaced_not_accreted(self, tmp_path):
+        """First import: no END TIME, defaults to a 1-hour interval.
+        Re-import: the same reading, corrected to its real 15 minutes.
+        update_or_create fixes the Sample either way, but the ORIGINAL
+        1-hour BACKFILLED span must not survive re-import — otherwise the
+        45 minutes the corrected file no longer describes would stay
+        falsely marked as known."""
+        t0 = utc(2025, 8, 5, 7, 0)  # 00:00 PDT
+
+        first = _write(tmp_path, "uncorrected.csv", UNCORRECTED_HOUR_CSV)
+        call_command("import_greenbutton", first)
+        sample = Sample.objects.get(series__metric="grid_import_wh")
+        assert sample.duration_s == 3600
+
+        # A LIVE span (the Eagle's own knowledge, not this command's to
+        # touch) overlapping the same range must survive re-import.
+        live_series = sample.series
+        record_coverage(
+            live_series, t0 + timedelta(minutes=20), t0 + timedelta(minutes=25),
+            CoverageSpan.State.LIVE,
+        )
+
+        second = _write(tmp_path, "corrected.csv", CORRECTED_QUARTER_CSV)
+        call_command("import_greenbutton", second)
+
+        sample.refresh_from_db()
+        assert sample.duration_s == 900
+
+        backfilled = CoverageSpan.objects.filter(
+            series__metric="grid_import_wh", state=CoverageSpan.State.BACKFILLED
+        )
+        assert backfilled.count() == 1
+        span = backfilled.get()
+        assert span.start == t0
+        assert span.end == t0 + timedelta(minutes=15)
+
+        live = CoverageSpan.objects.filter(
+            series__metric="grid_import_wh", state=CoverageSpan.State.LIVE
+        )
+        assert live.count() == 1  # untouched
+        assert live.get().start == t0 + timedelta(minutes=20)
+
+
+@pytest.mark.django_db
+class TestWiredIntoCostViews:
+    """Issue #5's whole point: Green Button backfill has to actually reach
+    the UI, not just sit in the database. A period with ONLY Green Button
+    data (no Eagle 3 / demand_w at all) must still populate the peak table
+    and cost heatmap through grid_hourly_wh."""
+
+    def test_peak_table_shows_real_dollars_from_green_button_only_data(
+        self, tmp_path, client, monkeypatch
+    ):
+        from billing.rates import SUMMER_OFFPEAK, SUMMER_PEAK
+
+        frozen_today = date(2026, 8, 10)
+        monkeypatch.setattr("catalog.views.timezone.localdate", lambda: frozen_today)
+
+        path = _write(
+            tmp_path, "full_day.csv", _full_day_single_usage_csv("08/10/2026", hourly_kwh=0.5)
+        )
+        call_command("import_greenbutton", path)
+
+        resp = client.get("/peak/")
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        # 4-9pm: 5h * 500Wh = 2.5 kWh; off-peak: 19h * 500Wh = 9.5 kWh
+        assert f"${2.5 * SUMMER_PEAK:.2f}" in content
+        assert f"${9.5 * SUMMER_OFFPEAK:.2f}" in content
+
+    def test_costmap_cell_is_real_from_green_button_only_data(
+        self, tmp_path, client, monkeypatch
+    ):
+        from billing.rates import SUMMER_PEAK
+
+        frozen_today = date(2026, 8, 10)
+        monkeypatch.setattr("catalog.views.timezone.localdate", lambda: frozen_today)
+
+        path = _write(
+            tmp_path, "full_day.csv", _full_day_single_usage_csv("08/10/2026", hourly_kwh=0.5)
+        )
+        call_command("import_greenbutton", path)
+
+        data = client.get("/costmap/data.json").json()
+        di = data["days"].index("2026-08-10")
+        assert data["z"][17][di] == pytest.approx(0.5 * SUMMER_PEAK)  # 5pm, inside 4-9pm
 
 
 @pytest.mark.django_db

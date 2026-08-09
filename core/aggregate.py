@@ -109,25 +109,8 @@ def _clipped_energy_wh(series: Series, start: datetime, end: datetime) -> float:
     return total
 
 
-def grid_hourly_wh(start: datetime, end: datetime) -> WindowEnergySplit:
-    """Import/export Wh for [start, end) — the grid source, whichever exists.
-
-    Preference order: demand_w (Eagle instantaneous demand) integrated
-    directly when its coverage for the window clears
-    GRID_DEMAND_MIN_COVERAGE — it's live and finer-grained. Otherwise
-    fall back to summing grid_import_wh/grid_export_wh (Green Button
-    backfill), clipped by overlap the same way _overlapping_watt_seconds
-    clips demand samples. Coverage in the result always describes
-    whichever source was actually used.
-    """
-    demand_series = (
-        Series.objects.filter(source__kind=Source.Kind.GRID, metric="demand_w").first()
-    )
-    if demand_series is not None:
-        demand_coverage = covered_fraction(demand_series, start, end)
-        if demand_coverage >= GRID_DEMAND_MIN_COVERAGE:
-            return energy_wh_split(demand_series, start, end)
-
+def _grid_energy_series_split(start: datetime, end: datetime) -> WindowEnergySplit:
+    """grid_import_wh/grid_export_wh (Green Button backfill) for [start, end)."""
     import_series = (
         Series.objects.filter(source__kind=Source.Kind.GRID, metric="grid_import_wh").first()
     )
@@ -144,3 +127,42 @@ def grid_hourly_wh(start: datetime, end: datetime) -> WindowEnergySplit:
         exported_wh=exported_wh,
         coverage=min(coverages) if coverages else 0.0,
     )
+
+
+def grid_hourly_wh(start: datetime, end: datetime) -> WindowEnergySplit:
+    """Import/export Wh for [start, end) — the grid source, whichever exists.
+
+    demand_w (Eagle instantaneous demand) is used directly once its
+    coverage for the window clears GRID_DEMAND_MIN_COVERAGE — it's live
+    and finer-grained. Below that, this compares demand_w's own
+    (partial) coverage against grid_import_wh/grid_export_wh (Green
+    Button backfill) and returns whichever is more complete for this
+    window, rather than an all-or-nothing switch: a window with some
+    real demand samples but no Green Button data at all must still
+    report what demand_w actually saw, not fall through to a
+    nonexistent series and report zero coverage. Ties go to demand_w.
+    Coverage in the result always describes whichever source was used.
+    """
+    demand_series = (
+        Series.objects.filter(source__kind=Source.Kind.GRID, metric="demand_w").first()
+    )
+    demand_coverage = covered_fraction(demand_series, start, end) if demand_series else 0.0
+    if demand_coverage >= GRID_DEMAND_MIN_COVERAGE:
+        return energy_wh_split(demand_series, start, end)
+
+    fallback = _grid_energy_series_split(start, end)
+    if fallback.coverage > demand_coverage:
+        return fallback
+    if demand_series is not None:
+        return energy_wh_split(demand_series, start, end)
+    return fallback
+
+
+def has_grid_data() -> bool:
+    """Any grid Series at all -- demand_w (Eagle) or the Green Button
+    grid_import_wh/grid_export_wh backfill. Existence gate for
+    grid_hourly_wh's consumers: they used to check "does demand_w exist"
+    before Green Button import could seed grid data with no Eagle 3
+    involved at all.
+    """
+    return Series.objects.filter(source__kind=Source.Kind.GRID).exists()

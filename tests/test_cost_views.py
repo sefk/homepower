@@ -207,7 +207,7 @@ class TestPeakSplitMath:
         record_coverage(grid_series, start, start + timedelta(hours=2), CoverageSpan.State.LIVE)
 
         peak_wh, peak_cov, offpeak_wh, offpeak_cov = _peak_offpeak_wh(
-            grid_series, day, timezone.get_current_timezone()
+            day, timezone.get_current_timezone()
         )
         assert offpeak_wh == pytest.approx(1000.0)  # 15:00-16:00
         assert peak_wh == pytest.approx(1000.0)  # 16:00-17:00
@@ -232,7 +232,7 @@ class TestPeakSplitMath:
         )
 
         _, _, _, offpeak_cov = _peak_offpeak_wh(
-            grid_series, day, timezone.get_current_timezone()
+            day, timezone.get_current_timezone()
         )
         # true weights: 15h morning (uncovered) + 3h evening (covered) = 18h real
         assert offpeak_cov == pytest.approx(10800 / 64800)

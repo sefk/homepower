@@ -219,9 +219,33 @@ class Command(BaseCommand):
                 if end_idx is not None and raw[end_idx].strip():
                     end_naive = _parse_dt(raw[date_idx], raw[end_idx])
                     end_ts = end_naive.replace(tzinfo=tz, fold=fold)
-                    if end_ts <= ts:  # END TIME wrapped past midnight
-                        end_naive += timedelta(days=1)
-                        end_ts = end_naive.replace(tzinfo=tz, fold=fold)
+                    if end_ts <= ts:
+                        # Wall clock didn't advance. Two different things
+                        # produce this: a genuine midnight wrap (23:45 ->
+                        # 00:00), or an interval straddling the DST
+                        # fall-back itself (START 01:45 in the first/PDT
+                        # pass, END "01:00" meaning 01:00 in the second/PST
+                        # pass — same digits, later in real time). Try the
+                        # fall-back reading first: reinterpreting END TIME
+                        # at fold=1 is a no-op for any unambiguous instant,
+                        # so it only changes the result when that's really
+                        # the fix. Only fall through to the midnight wrap
+                        # when that still doesn't produce a later instant.
+                        #
+                        # Comparing via UTC, not `candidate > ts` directly:
+                        # two datetimes sharing the same zoneinfo tzinfo
+                        # object take Python's wall-clock comparison
+                        # shortcut regardless of fold (REVIEW-INSIGHTS —
+                        # same pitfall as duration math, just on `>`
+                        # instead of `-`), which would compare 01:00 PST
+                        # against 01:45 PDT as if both were the same
+                        # offset and get this exact case backwards.
+                        candidate = end_naive.replace(tzinfo=tz, fold=1)
+                        if candidate.astimezone(dt_timezone.utc) > ts.astimezone(dt_timezone.utc):
+                            end_ts = candidate
+                        else:
+                            end_naive += timedelta(days=1)
+                            end_ts = end_naive.replace(tzinfo=tz, fold=fold)
                     # REVIEW-INSIGHTS: convert to UTC before duration math —
                     # same-tzinfo local datetimes subtract by wall clock and
                     # lie across a DST edge.
@@ -260,9 +284,37 @@ class Command(BaseCommand):
             else:
                 row.duration_s = _FALLBACK_DURATION_S
 
+        # Per series, the [min, max) real-time range this file actually
+        # writes samples for — used to make re-import authoritative for
+        # that range, not just additive.
+        ranges: dict[str, tuple[datetime, datetime]] = {}
+        for row in parsed:
+            row_start = row.ts.astimezone(dt_timezone.utc)
+            row_end = row_start + timedelta(seconds=row.duration_s)
+            for metric, _ in row.values:
+                lo, hi = ranges.get(metric, (row_start, row_end))
+                ranges[metric] = (min(lo, row_start), max(hi, row_end))
+
         created = updated = 0
         ts_min = ts_max = None
         with transaction.atomic():
+            # A corrected re-import (e.g. an hour-long row replaced by the
+            # real 15-minute one) fixes the Sample via update_or_create
+            # below, but stale BACKFILLED coverage from the earlier import
+            # would otherwise survive and claim the now-vacated 45 minutes
+            # are still known. Clearing BACKFILLED spans this file's range
+            # touches — never LIVE, which is the collector's own knowledge,
+            # not this command's to revise — makes re-import fully
+            # authoritative for what it actually describes; the loop below
+            # then rebuilds coverage from scratch, purely from rows written.
+            for metric, (lo, hi) in ranges.items():
+                CoverageSpan.objects.filter(
+                    series=series_by_metric[metric],
+                    state=CoverageSpan.State.BACKFILLED,
+                    start__lt=hi,
+                    end__gt=lo,
+                ).delete()
+
             for row in parsed:
                 for metric, wh in row.values:
                     series = series_by_metric[metric]
