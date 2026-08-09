@@ -162,6 +162,18 @@ class TestPeakData:
         assert data["peak_kwh"][0] == pytest.approx(3)
         assert data["offpeak_kwh"][0] == pytest.approx(-436)
 
+    def test_dollars_use_the_periods_own_season_not_kwh_alone(self, db, client):
+        # PRD: the question is what the window COSTS, not how many kWh it
+        # is — equal kWh isn't equal dollars under TOU. Dec 15 2025 is a
+        # winter bill: peak_kwh=474, offpeak_kwh=563.
+        call_command("seed_bills")
+        data = client.get("/peak/data.json").json()
+        i = data["labels"].index("2025-12-15")
+        assert data["peak_kwh"][i] == pytest.approx(474)
+        assert data["offpeak_kwh"][i] == pytest.approx(563)
+        assert data["peak_dollars"][i] == pytest.approx(474 * WINTER_PEAK)
+        assert data["offpeak_dollars"][i] == pytest.approx(563 * WINTER_OFFPEAK)
+
 
 class TestPeakSplitMath:
     """core split arithmetic, independent of what 'today' happens to be."""
@@ -185,6 +197,31 @@ class TestPeakSplitMath:
         assert peak_cov > 0
         assert offpeak_cov > 0
 
+    def test_offpeak_weighting_is_correct_across_a_spring_forward_day(self, grid_series):
+        """The off-peak morning sub-window (midnight-4pm) contains the
+        spring-forward transition, so it has only 15 real hours even
+        though it spans 16 wall-clock hours. Weighting the two sub-windows'
+        coverage by wall-clock duration (same-tzinfo subtraction) would use
+        16h/3h instead of the true 15h/3h and misweight the combined
+        fraction.
+        """
+        from catalog.views import _peak_offpeak_wh
+
+        day = date(2026, 3, 8)  # America/Los_Angeles: 2:00am -> 3:00am
+        evening_start = la(2026, 3, 8, 21, 0)
+        # cover only the (unaffected) evening sub-window, fully
+        record_coverage(
+            grid_series, evening_start, evening_start + timedelta(hours=3), CoverageSpan.State.LIVE
+        )
+
+        _, _, _, offpeak_cov = _peak_offpeak_wh(
+            grid_series, day, timezone.get_current_timezone()
+        )
+        # true weights: 15h morning (uncovered) + 3h evening (covered) = 18h real
+        assert offpeak_cov == pytest.approx(10800 / 64800)
+        # the wall-clock-duration bug would instead give 10800 / 68400
+        assert offpeak_cov != pytest.approx(10800 / 68400)
+
 
 class TestPeakPage:
     def test_no_live_data_shows_empty_state(self, db, client):
@@ -207,7 +244,9 @@ class TestPeakPage:
         assert resp.status_code == 200
         content = resp.content.decode()
         assert "Sat Aug 1" in content
-        assert "1000" in content  # both cells read 1000 Wh
+        # 1kWh at August (summer) rates: $0.66 peak, $0.45 off-peak
+        assert f"${SUMMER_PEAK:.2f}" in content
+        assert f"${SUMMER_OFFPEAK:.2f}" in content
         assert "unknown" in content  # the other 6 days have no coverage at all
 
 

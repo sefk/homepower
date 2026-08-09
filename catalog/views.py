@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from billing.cycles import cycle_label, true_up_cycles
 from billing.models import BillPeriod
-from billing.rates import PEAK_END_HOUR, PEAK_START_HOUR, rate_for
+from billing.rates import PEAK_END_HOUR, PEAK_START_HOUR, rate_for, rates_for
 from core import coverage
 from core.aggregate import energy_wh, energy_wh_split
 from core.models import CollectorRun, Sample, Series, Source
@@ -414,6 +414,11 @@ def _peak_offpeak_wh(series: Series, local_day, tz):
     same arithmetic covered_fraction does over a single window, just applied
     across the two pieces (never our own gap detection — coverage stays the
     one authority, per docs/REVIEW-INSIGHTS.md).
+
+    Weights come from UTC-normalized boundaries, not wall-clock subtraction:
+    two datetimes sharing the same tzinfo object subtract by wall clock in
+    Python, so on a DST transition day dur_morning/dur_evening would be off
+    by an hour (docs/REVIEW-INSIGHTS.md "DST is a standing adversary").
     """
     day_start = datetime.combine(local_day, time.min, tzinfo=tz)
     peak_start = datetime.combine(local_day, time(hour=PEAK_START_HOUR), tzinfo=tz)
@@ -424,8 +429,8 @@ def _peak_offpeak_wh(series: Series, local_day, tz):
     off_morning = energy_wh_split(series, day_start, peak_start)
     off_evening = energy_wh_split(series, peak_end, next_day_start)
 
-    dur_morning = (peak_start - day_start).total_seconds()
-    dur_evening = (next_day_start - peak_end).total_seconds()
+    dur_morning = (coverage._utc(peak_start) - coverage._utc(day_start)).total_seconds()
+    dur_evening = (coverage._utc(next_day_start) - coverage._utc(peak_end)).total_seconds()
     dur_off = dur_morning + dur_evening
     offpeak_wh = off_morning.imported_wh + off_evening.imported_wh
     offpeak_coverage = (
@@ -436,8 +441,13 @@ def _peak_offpeak_wh(series: Series, local_day, tz):
 
 
 def peak(request):
-    """What share of the bill is the 4-9pm window? Billed peak/off-peak kWh
-    per period, plus a live 7-day table of the same split from Eagle data."""
+    """What share of the bill is the 4-9pm window? Billed peak/off-peak $
+    per period, plus a live 7-day table of the same split from Eagle data.
+
+    Off-peak spans two sub-windows (midnight-4pm, 9pm-midnight) that never
+    cross a season boundary — same local day, so one off-peak rate covers
+    both.
+    """
     tz = timezone.get_current_timezone()
     today = timezone.localdate()
     days = [today - timedelta(days=i) for i in range(PEAK_TABLE_DAYS - 1, -1, -1)]
@@ -447,12 +457,13 @@ def peak(request):
     if series:
         for day in days:
             peak_wh, peak_cov, offpeak_wh, offpeak_cov = _peak_offpeak_wh(series, day, tz)
+            peak_rate, offpeak_rate = rates_for(day)
             rows.append(
                 {
                     "day": day,
-                    "peak_wh": peak_wh,
+                    "peak_dollars": peak_wh / 1000 * peak_rate,
                     "peak_coverage_pct": 100 * peak_cov,
-                    "offpeak_wh": offpeak_wh,
+                    "offpeak_dollars": offpeak_wh / 1000 * offpeak_rate,
                     "offpeak_coverage_pct": 100 * offpeak_cov,
                 }
             )
@@ -461,12 +472,26 @@ def peak(request):
 
 
 def peak_data(request):
+    """Billed peak/off-peak kWh per period, plus the estimated $ split at
+    the bill-derived rate for the period's season (PRD: what the 4-9pm
+    window COSTS, not just how many kWh it is — equal kWh isn't equal
+    dollars under TOU)."""
     periods = BillPeriod.objects.order_by("end_date")
+    labels, peak_kwh, offpeak_kwh, peak_dollars, offpeak_dollars = [], [], [], [], []
+    for p in periods:
+        peak_rate, offpeak_rate = rates_for(p.end_date)
+        labels.append(p.end_date.isoformat())
+        peak_kwh.append(p.peak_kwh)
+        offpeak_kwh.append(p.offpeak_kwh)
+        peak_dollars.append(p.peak_kwh * peak_rate)
+        offpeak_dollars.append(p.offpeak_kwh * offpeak_rate)
     return JsonResponse(
         {
-            "labels": [p.end_date.isoformat() for p in periods],
-            "peak_kwh": [p.peak_kwh for p in periods],
-            "offpeak_kwh": [p.offpeak_kwh for p in periods],
+            "labels": labels,
+            "peak_kwh": peak_kwh,
+            "offpeak_kwh": offpeak_kwh,
+            "peak_dollars": peak_dollars,
+            "offpeak_dollars": offpeak_dollars,
         }
     )
 

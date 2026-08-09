@@ -30,10 +30,18 @@ def is_summer(d: date) -> bool:
     return 6 <= d.month <= 9
 
 
+def rates_for(d: date) -> tuple[float, float]:
+    """(peak $/kWh, off-peak $/kWh) for the season `d` falls in.
+
+    The one place season->rate mapping lives, so per-period cost
+    estimates (peak view) and per-instant lookups (rate_for) can't drift
+    apart from each other.
+    """
+    return (SUMMER_PEAK, SUMMER_OFFPEAK) if is_summer(d) else (WINTER_PEAK, WINTER_OFFPEAK)
+
+
 def rate_for(dt: datetime) -> float:
     """$/kWh for an aware datetime, converted to house-local time first."""
     local_dt = timezone.localtime(dt)
-    peak = is_peak(local_dt)
-    if is_summer(local_dt):
-        return SUMMER_PEAK if peak else SUMMER_OFFPEAK
-    return WINTER_PEAK if peak else WINTER_OFFPEAK
+    peak_rate, offpeak_rate = rates_for(local_dt.date())
+    return peak_rate if is_peak(local_dt) else offpeak_rate
