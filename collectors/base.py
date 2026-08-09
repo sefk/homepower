@@ -54,12 +54,14 @@ class Collector(ABC):
 
     @property
     def grace_s(self) -> int:
-        """Max gap between readings that still bridges live coverage.
+        """Gap bound (exclusive) for bridging live coverage.
 
-        Point-in-time pollers tolerate jitter (2 polls). Interval-series
-        vendors (SolarEdge quarters) must override this to one resolution
-        step: an omitted interval is unknown, and a wide grace would
-        quietly cover it.
+        Readings strictly closer than this bridge; a gap at or beyond it
+        is a hole. At exactly 2 polls apart a poll was missed, so that
+        boundary stays unknown — matching the chart layer, which breaks
+        lines at >= 2x resolution. Interval-series vendors (SolarEdge
+        quarters) override this to one resolution step: an omitted
+        interval is unknown, and a wide grace would quietly cover it.
         """
         return GRACE_POLLS * self.poll_interval_s
 
@@ -133,7 +135,7 @@ class Collector(ABC):
             bridge = (
                 prev is not None
                 and prev <= r.ts
-                and (r.metric in self.always_bridge or r.ts - prev <= grace)
+                and (r.metric in self.always_bridge or r.ts - prev < grace)
             )
             start = prev if bridge else r.ts
             record_coverage(

@@ -115,6 +115,13 @@ class TestFailure:
         assert "vendor 503" in run_row.message
         assert CoverageSpan.objects.count() == 0
 
+    def test_exactly_one_missed_poll_is_a_hole(self, transactional_db):
+        """Samples exactly 2x the interval apart mean a poll was missed;
+        coverage must agree with the chart layer that this is unknown."""
+        t = utc(2026, 8, 1, 10, 0)
+        run(FakeCollector([[reading(t)], [reading(t + timedelta(seconds=120))]]), times=2)
+        assert CoverageSpan.objects.count() == 2
+
     def test_failure_between_polls_leaves_a_gap_severed(self, transactional_db):
         """A failed poll drops the bridge only if the outage exceeds grace."""
         t = utc(2026, 8, 1, 10, 0)
