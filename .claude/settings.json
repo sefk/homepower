@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run pytest *)",
+      "Bash(tmux capture-pane *)",
+      "Bash(codex-review.sh *)",
+      "Bash(gcloud logging read *)",
+      "Bash(git fetch *)",
+      "Bash(node --test *)",
+      "Bash(uv run ruff check *)",
+      "mcp__plugin_github_github__pull_request_read",
+      "mcp__plugin_github_github__issue_read"
+    ]
+  }
+}

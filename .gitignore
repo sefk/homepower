@@ -12,3 +12,6 @@ db.sqlite3-*
 # Tooling
 .pytest_cache/
 .tmp/
+
+# Claude Code local-only settings
+.claude/settings.local.json
