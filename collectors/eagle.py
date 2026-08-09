@@ -121,6 +121,8 @@ class EagleCollector(Collector):
     kind = Source.Kind.GRID
     # cumulative registers: the delta is exact across any gap
     always_bridge = frozenset({"energy_delivered_wh", "energy_received_wh"})
+    # demand holds until the next push; duration stretches to match
+    stretch_to_next = frozenset({"demand_w"})
 
     @property
     def grace_s(self) -> int:

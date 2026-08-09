@@ -165,3 +165,23 @@ class TestPushCadenceGrace:
         late = DEMAND_XML.replace(b"0x2ff09e00", b"0x2ff09e1e")  # +30s
         client.post("/ingest/eagle/", late, content_type="text/xml")
         assert CoverageSpan.objects.filter(series__metric="demand_w").count() == 1
+
+    def test_bridged_push_stretches_prior_duration(self, transactional_db, client):
+        """Demand holds until the next push: a 45s bridged gap stretches the
+        prior sample to 45s so energy_wh matches what coverage claims."""
+        client.post("/ingest/eagle/", DEMAND_XML, content_type="text/xml")
+        late = DEMAND_XML.replace(b"0x2ff09e00", b"0x2ff09e2d")  # +45s
+        client.post("/ingest/eagle/", late, content_type="text/xml")
+        samples = list(
+            Sample.objects.filter(series__metric="demand_w").order_by("ts")
+        )
+        assert [s.duration_s for s in samples] == [45, 15]
+
+    def test_unbridged_gap_leaves_duration_nominal(self, transactional_db, client):
+        client.post("/ingest/eagle/", DEMAND_XML, content_type="text/xml")
+        late = DEMAND_XML.replace(b"0x2ff09e00", b"0x2ff0a000")  # +8m32s, past grace
+        client.post("/ingest/eagle/", late, content_type="text/xml")
+        samples = list(
+            Sample.objects.filter(series__metric="demand_w").order_by("ts")
+        )
+        assert [s.duration_s for s in samples] == [15, 15]  # hole stays a hole

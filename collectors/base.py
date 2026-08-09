@@ -51,6 +51,11 @@ class Collector(ABC):
     # gap between them. Correct only for cumulative registers, where the
     # difference of two readings is exact knowledge of the whole interval.
     always_bridge: frozenset[str] = frozenset()
+    # Variable-cadence metrics (Eagle pushes): a reading holds until the
+    # next one, so on a bridged successor the previous sample's duration
+    # stretches to the observed interval. Otherwise energy integration
+    # undercounts inside stretches that coverage calls fully known.
+    stretch_to_next: frozenset[str] = frozenset()
 
     @property
     def grace_s(self) -> int:
@@ -137,6 +142,10 @@ class Collector(ABC):
                 and prev <= r.ts
                 and (r.metric in self.always_bridge or r.ts - prev < grace)
             )
+            if bridge and prev < r.ts and r.metric in self.stretch_to_next:
+                Sample.objects.filter(series=series, ts=prev).update(
+                    duration_s=int((r.ts - prev).total_seconds())
+                )
             start = prev if bridge else r.ts
             record_coverage(
                 series, start, r.ts + timedelta(seconds=r.duration_s), CoverageSpan.State.LIVE
