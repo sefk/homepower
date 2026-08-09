@@ -79,6 +79,22 @@ remove with `uploader_delete` + `<provider>homepower</provider>`.
 Command names and parameters were recovered from the Rainforest cloud
 portal's JS bundle; they are not publicly documented.
 
+## Green Button backfill (grid history before/beyond the Eagle 3)
+
+PG&E's own meter history, for filling gaps the Eagle 3 didn't cover or
+seeding data from before it was installed:
+
+**pge.com → Energy Usage Details → Green Button "Export usage for a
+range" → CSV.**
+
+```sh
+uv run python manage.py import_greenbutton ~/Downloads/pge_electric_usage_*.csv
+```
+
+Lands as `grid_import_wh` / `grid_export_wh` on the `eagle` Source,
+coverage recorded `backfilled`. Re-running the same file is safe — rows
+upsert on (series, timestamp).
+
 ## Notes
 
 - `KeepAlive` restarts the process if either the web server or the

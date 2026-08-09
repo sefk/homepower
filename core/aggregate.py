@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from typing import NamedTuple
 
 from .coverage import covered_fraction
-from .models import Sample, Series
+from .models import Sample, Series, Source
 
 
 class WindowEnergy(NamedTuple):
@@ -76,4 +76,71 @@ def energy_wh_split(series: Series, start: datetime, end: datetime) -> WindowEne
         imported_wh=pos / 3600.0,
         exported_wh=neg / 3600.0,
         coverage=covered_fraction(series, start, end),
+    )
+
+
+# Below this, demand_w is "complete enough" to integrate directly rather
+# than fall back to the Green Button interval series.
+GRID_DEMAND_MIN_COVERAGE = 0.99
+
+
+def _clipped_energy_wh(series: Series, start: datetime, end: datetime) -> float:
+    """Sum energy (Wh) samples overlapping [start, end), clipped by overlap.
+
+    Unlike _overlapping_watt_seconds (power samples, clipped by
+    overlap-seconds), these rows already hold interval energy — a Green
+    Button row's value is the whole quarter/hour's Wh, not a rate. Clip
+    proportionally instead: value * overlap_s / duration_s.
+    """
+    from .coverage import _utc
+
+    start, end = _utc(start), _utc(end)
+    total = 0.0
+    samples = Sample.objects.filter(
+        series=series,
+        ts__gte=start - timedelta(seconds=_MAX_SAMPLE_S),
+        ts__lt=end,
+    )
+    for s in samples.iterator():
+        s_end = s.ts + timedelta(seconds=s.duration_s)
+        overlap = (min(end, s_end) - max(start, s.ts)).total_seconds()
+        if overlap > 0 and s.duration_s > 0:
+            total += s.value * overlap / s.duration_s
+    return total
+
+
+def grid_hourly_wh(start: datetime, end: datetime) -> WindowEnergySplit:
+    """Import/export Wh for [start, end) — the grid source, whichever exists.
+
+    Preference order: demand_w (Eagle instantaneous demand) integrated
+    directly when its coverage for the window clears
+    GRID_DEMAND_MIN_COVERAGE — it's live and finer-grained. Otherwise
+    fall back to summing grid_import_wh/grid_export_wh (Green Button
+    backfill), clipped by overlap the same way _overlapping_watt_seconds
+    clips demand samples. Coverage in the result always describes
+    whichever source was actually used.
+    """
+    demand_series = (
+        Series.objects.filter(source__kind=Source.Kind.GRID, metric="demand_w").first()
+    )
+    if demand_series is not None:
+        demand_coverage = covered_fraction(demand_series, start, end)
+        if demand_coverage >= GRID_DEMAND_MIN_COVERAGE:
+            return energy_wh_split(demand_series, start, end)
+
+    import_series = (
+        Series.objects.filter(source__kind=Source.Kind.GRID, metric="grid_import_wh").first()
+    )
+    export_series = (
+        Series.objects.filter(source__kind=Source.Kind.GRID, metric="grid_export_wh").first()
+    )
+    imported_wh = _clipped_energy_wh(import_series, start, end) if import_series else 0.0
+    exported_wh = _clipped_energy_wh(export_series, start, end) if export_series else 0.0
+    coverages = [
+        covered_fraction(s, start, end) for s in (import_series, export_series) if s is not None
+    ]
+    return WindowEnergySplit(
+        imported_wh=imported_wh,
+        exported_wh=exported_wh,
+        coverage=min(coverages) if coverages else 0.0,
     )

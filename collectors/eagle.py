@@ -158,6 +158,17 @@ class EagleCollector(Collector):
 collector = EagleCollector()
 
 
+def ensure_source() -> Source:
+    """Get-or-create the eagle Source row with the collector's own defaults.
+
+    Used by the Green Button importer (core/management/commands/
+    import_greenbutton.py), which writes to this Source without going
+    through the push/poll cycle and so has no other reason to instantiate
+    a collector.
+    """
+    return collector._ensure_source()
+
+
 def _save_unparsed(body: bytes) -> str:
     unparsed_dir = settings.VAR_DIR / "ingest-unparsed"
     unparsed_dir.mkdir(parents=True, exist_ok=True)
