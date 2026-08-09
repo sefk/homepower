@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     "core",
     "collectors",
     "catalog",
+    "billing",
 ]
 
 MIDDLEWARE = [
