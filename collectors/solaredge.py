@@ -33,6 +33,13 @@ class SolarEdgeCollector(Collector):
     poll_interval_s = RESOLUTION_S
     native_resolution_s = RESOLUTION_S
 
+    @property
+    def grace_s(self) -> int:
+        # Quarters are an interval series: only exactly-adjacent readings
+        # bridge. An omitted quarter must stay unknown, not get covered by
+        # the poller-jitter grace.
+        return RESOLUTION_S
+
     def __init__(self, api_key: str, site_id: str, session_factory=aiohttp.ClientSession):
         super().__init__()
         self.api_key = api_key

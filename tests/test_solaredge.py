@@ -153,3 +153,47 @@ class TestRegistry:
         assert len(matches) == 1
         assert matches[0].api_key == "key123"
         assert matches[0].site_id == "9999"
+
+
+class TestOmittedQuarterCoverage:
+    def test_missing_middle_quarter_stays_unknown(self, transactional_db):
+        """An omitted vendor quarter must not be bridged into live coverage —
+        the hourly table would claim 100% while its Wh total excludes it."""
+        import asyncio
+        from datetime import timedelta
+
+        from django.utils import timezone as djtz
+
+        from core.models import CoverageSpan
+
+        payload = {
+            "powerDetails": {
+                "meters": [
+                    {
+                        "type": "Production",
+                        "values": [
+                            {"date": "2026-08-01 10:00:00", "value": 4000.0},
+                            # 10:15 omitted by the vendor
+                            {"date": "2026-08-01 10:30:00", "value": 4200.0},
+                        ],
+                    }
+                ]
+            }
+        }
+
+        collector = SolarEdgeCollector(api_key="k", site_id="1")
+
+        async def _go():
+            await collector.setup()
+            collector.poll = lambda: _readings()  # bypass HTTP
+
+            async def _readings():
+                return collector.parse_power_details(payload)
+
+            collector.poll = _readings
+            await collector.run_once()
+
+        asyncio.run(_go())
+        spans = CoverageSpan.objects.order_by("start")
+        assert spans.count() == 2  # the omitted quarter is a hole
+        assert spans[0].end + timedelta(seconds=900) == spans[1].start

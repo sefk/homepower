@@ -52,6 +52,17 @@ class Collector(ABC):
     # difference of two readings is exact knowledge of the whole interval.
     always_bridge: frozenset[str] = frozenset()
 
+    @property
+    def grace_s(self) -> int:
+        """Max gap between readings that still bridges live coverage.
+
+        Point-in-time pollers tolerate jitter (2 polls). Interval-series
+        vendors (SolarEdge quarters) must override this to one resolution
+        step: an omitted interval is unknown, and a wide grace would
+        quietly cover it.
+        """
+        return GRACE_POLLS * self.poll_interval_s
+
     def __init__(self):
         self._source: Source | None = None
         self._last_ts: dict[str, datetime] = {}  # metric -> last successful poll ts
@@ -103,7 +114,7 @@ class Collector(ABC):
         return source
 
     def _store(self, readings: list[Reading]) -> None:
-        grace = timedelta(seconds=GRACE_POLLS * self.poll_interval_s)
+        grace = timedelta(seconds=self.grace_s)
         for r in readings:
             series, _ = Series.objects.get_or_create(
                 source=self._source, metric=r.metric, defaults={"unit": r.unit}
