@@ -68,6 +68,37 @@ class TestStore:
         span = CoverageSpan.objects.get()
         assert span.start == t
 
+    def test_overlapping_reread_window_does_not_invert_coverage(self, transactional_db):
+        """A collector that re-reads a lookback window (SolarEdge) hands back
+        older timestamps; bridging them backwards used to raise and kill the
+        process. Re-reads must merge quietly and never move _last_ts back."""
+        t = utc(2026, 8, 1, 10, 0)
+        polls = [
+            [reading(t), reading(t + timedelta(seconds=60))],
+            # second poll re-reads the same quarter-hour plus one new reading
+            [reading(t), reading(t + timedelta(seconds=60)), reading(t + timedelta(seconds=120))],
+        ]
+        run(FakeCollector(polls), times=2)
+
+        span = CoverageSpan.objects.get()  # still one clean span
+        assert (span.start, span.end) == (t, t + timedelta(seconds=180))
+        assert CollectorRun.objects.filter(ok=False).count() == 0
+
+    def test_store_failure_records_failed_run_not_crash(self, transactional_db):
+        """Storage bugs surface on the health page, not as a launchd crash loop."""
+        bad = reading(utc(2026, 8, 1, 10, 0))
+        bad.duration_s = 0  # forces record_coverage's empty-span ValueError
+        collector = FakeCollector([[bad]])
+
+        async def _go():
+            await collector.setup()
+            return await collector.run_once()
+
+        assert asyncio.run(_go()) is False  # must not raise
+        run_row = CollectorRun.objects.get()
+        assert run_row.ok is False
+        assert "store failed" in run_row.message
+
     def test_source_row_created_and_updated(self, transactional_db):
         run(FakeCollector([[reading(utc(2026, 8, 1, 10, 0))]]))
         source = Source.objects.get(slug="fake")

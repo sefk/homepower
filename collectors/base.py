@@ -73,7 +73,16 @@ class Collector(ABC):
             logger.warning("%s poll failed: %s", self.slug, exc)
             await sync_to_async(self._record_run)(started, ok=False, message=str(exc))
             return False
-        await sync_to_async(self._store)(readings)
+        try:
+            await sync_to_async(self._store)(readings)
+        except Exception as exc:
+            # A storage bug must surface as a visible failed run, not kill
+            # the whole process in a launchd crash loop.
+            logger.exception("%s store failed", self.slug)
+            await sync_to_async(self._record_run)(
+                started, ok=False, message=f"store failed: {exc!r}"
+            )
+            return False
         await sync_to_async(self._record_run)(
             started, ok=True, message=f"{len(readings)} readings"
         )
@@ -105,14 +114,22 @@ class Collector(ABC):
                 defaults={"duration_s": r.duration_s, "value": r.value},
             )
             prev = self._last_ts.get(r.metric)
-            bridge = prev is not None and (
-                r.metric in self.always_bridge or r.ts - prev <= grace
+            # Bridge only forward: a collector that re-reads a window (e.g.
+            # SolarEdge's one-hour lookback) hands us timestamps older than
+            # prev, and bridging those would invert the span. Re-read
+            # readings still record their own interval, which merges into
+            # the existing span.
+            bridge = (
+                prev is not None
+                and prev <= r.ts
+                and (r.metric in self.always_bridge or r.ts - prev <= grace)
             )
             start = prev if bridge else r.ts
             record_coverage(
                 series, start, r.ts + timedelta(seconds=r.duration_s), CoverageSpan.State.LIVE
             )
-            self._last_ts[r.metric] = r.ts
+            if prev is None or r.ts > prev:
+                self._last_ts[r.metric] = r.ts
 
     def _record_run(self, started: datetime, ok: bool, message: str) -> None:
         CollectorRun.objects.create(
