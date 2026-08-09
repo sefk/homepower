@@ -116,6 +116,14 @@ EAGLE_INSTALL_CODE = os.environ.get("EAGLE_INSTALL_CODE", "")
 # demand-coverage grace (2x).
 EAGLE_NOMINAL_INTERVAL_S = int(os.environ.get("EAGLE_NOMINAL_INTERVAL_S", "15"))
 
+# Installed capacity, for /solarhealth/'s W/kW normalization (PRD: "Main vs
+# ADU, normalized per kW installed"). Main array: 25 x 345W SunPower X21
+# (docs/635-central-energy-analysis-gemini.md). ADU is a PRD assumption --
+# 5 x Enphase IQ7+ -- and should be replaced with the real figure read off
+# the Envoy once that's available (PRD "Assumptions" table).
+SOLAR_MAIN_KW = 8.625
+SOLAR_ADU_KW = 1.75
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,

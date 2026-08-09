@@ -17,4 +17,12 @@ urlpatterns = [
     path("peak/data.json", views.peak_data, name="peak_data"),
     path("costmap/", views.costmap, name="costmap"),
     path("costmap/data.json", views.costmap_data, name="costmap_data"),
+    path("baseline/", views.baseline, name="baseline"),
+    path("baseline/data.json", views.baseline_data, name="baseline_data"),
+    path("electrify/", views.electrify, name="electrify"),
+    path("electrify/data.json", views.electrify_data, name="electrify_data"),
+    path("selfuse/", views.selfuse, name="selfuse"),
+    path("selfuse/data.json", views.selfuse_data, name="selfuse_data"),
+    path("solarhealth/", views.solarhealth, name="solarhealth"),
+    path("solarhealth/data.json", views.solarhealth_data, name="solarhealth_data"),
 ]

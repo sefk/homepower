@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Self-consumption{% endblock %}
+
+{% block head %}
+<script src="/static/vendor/plotly.min.js"></script>
+<style>
+#chart { width: 100%; height: 420px; }
+#recent-chart { width: 100%; height: 320px; }
+.banner { font-weight: 600; color: var(--muted); margin: 0 0 1rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Self-consumption</h1>
+
+{% if not solaredge_live %}
+<p class="banner">Main array not yet collecting — ADU only.</p>
+{% endif %}
+
+<div class="card">
+  <div id="chart"></div>
+  <p class="small muted" style="margin-bottom:0">
+    Self-used + exported = generation, per day over the trailing month. A day only renders
+    when both generation coverage (all solar series) and grid coverage are at least 90% —
+    otherwise it's unknown, not zero. This is the number that decides whether a battery or
+    load-shifting is worth anything.
+  </p>
+</div>
+
+{% if recent_day %}
+<div class="card">
+  <h2 style="margin-bottom: 0.5rem">Export timing — {{ recent_day|date:"D M j, Y" }}</h2>
+  <div id="recent-chart"></div>
+  <p class="small muted" style="margin-bottom:0">
+    Shaded band is the 4–9pm peak-rate window, for the most recent fully-covered day.
+    Exporting at 1pm while importing at 6pm is the whole self-consumption problem in
+    one chart.
+  </p>
+</div>
+{% endif %}
+
+<script>
+const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+const ink2 = dark ? "#c3c2b7" : "#52514e";
+const grid = dark ? "#2c2c2a" : "#e1e0d9";
+const baseline = dark ? "#383835" : "#c3c2b7";
+const selfUsedColor = dark ? "#199e70" : "#1baf7a";
+const exportedColor = dark ? "#3987e5" : "#2a78d6";
+
+fetch("{% url 'catalog:selfuse_data' %}")
+  .then((r) => r.json())
+  .then(({ days, self_used_wh, exported_wh }) => {
+    const layout = {
+      barmode: "stack",
+      margin: { l: 55, r: 15, t: 10, b: 60 },
+      paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: "system-ui, sans-serif", size: 12, color: ink2 },
+      xaxis: { gridcolor: grid, linecolor: baseline, zeroline: false, type: "category" },
+      yaxis: {
+        title: { text: "Wh" },
+        gridcolor: grid,
+        linecolor: baseline,
+        zeroline: true,
+        zerolinecolor: ink2,
+        zerolinewidth: 1,
+        rangemode: "tozero",
+      },
+      showlegend: true,
+      legend: { orientation: "h", y: 1.08 },
+      hovermode: "x unified",
+    };
+    Plotly.newPlot(
+      "chart",
+      [
+        { x: days, y: self_used_wh, name: "self-used", type: "bar", marker: { color: selfUsedColor } },
+        { x: days, y: exported_wh, name: "exported", type: "bar", marker: { color: exportedColor } },
+      ],
+      layout,
+      { displayModeBar: false, responsive: true },
+    );
+  });
+
+{% if recent_day %}
+fetch("{% url 'catalog:grid_data' %}?date={{ recent_day|date:'Y-m-d' }}&range=day")
+  .then((r) => r.json())
+  .then(({ traces }) => {
+    const plotTraces = traces.map((t) => ({
+      x: t.x,
+      y: t.y,
+      name: t.name,
+      type: "scatter",
+      mode: "lines",
+      connectgaps: false,
+      line: { width: 2, color: exportedColor, shape: t.stepped ? "hv" : "linear" },
+      hovertemplate: "%{y:.0f} W · %{x|%H:%M:%S}<extra></extra>",
+    }));
+    const layout = {
+      margin: { l: 55, r: 15, t: 10, b: 40 },
+      paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: "system-ui, sans-serif", size: 12, color: ink2 },
+      xaxis: { gridcolor: grid, linecolor: baseline, zeroline: false },
+      yaxis: {
+        title: { text: "W" }, gridcolor: grid, linecolor: baseline,
+        zeroline: true, zerolinecolor: ink2, zerolinewidth: 1, rangemode: "tozero",
+      },
+      shapes: [
+        {
+          // 4-9pm peak window, shaded
+          type: "rect", xref: "x", yref: "paper",
+          x0: "{{ recent_day|date:'Y-m-d' }} 16:00:00", x1: "{{ recent_day|date:'Y-m-d' }} 21:00:00",
+          y0: 0, y1: 1,
+          fillcolor: dark ? "rgba(217,89,38,0.12)" : "rgba(235,104,52,0.10)",
+          line: { width: 0 },
+        },
+      ],
+      showlegend: plotTraces.length > 1,
+      legend: { orientation: "h", y: 1.08 },
+      hovermode: "x unified",
+    };
+    Plotly.newPlot("recent-chart", plotTraces, layout, { displayModeBar: false, responsive: true });
+  });
+{% endif %}
+</script>
+{% endblock %}

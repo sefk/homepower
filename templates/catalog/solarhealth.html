@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Solar health{% endblock %}
+
+{% block head %}
+<script src="/static/vendor/plotly.min.js"></script>
+<style>
+#chart { width: 100%; height: 420px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Solar health</h1>
+
+{% if not comparison_active %}
+<p class="muted small">
+  Only the ADU array is live; the per-kW comparison activates once SolarEdge lands. One
+  trace, for now.
+</p>
+{% endif %}
+
+<div class="card">
+  <div id="chart"></div>
+  <p class="small muted" style="margin-bottom:0">
+    Production normalized by installed capacity — ADU {{ adu_kw }} kW, main array
+    {{ main_kw }} kW — so both arrays share one axis regardless of size. Divergence
+    between them is the signal. Trailing 7 days; breaks in a line are unknown intervals,
+    not zero.
+  </p>
+</div>
+
+<script>
+const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+const ink2 = dark ? "#c3c2b7" : "#52514e";
+const grid = dark ? "#2c2c2a" : "#e1e0d9";
+const baseline = dark ? "#383835" : "#c3c2b7";
+const seriesColors = [dark ? "#3987e5" : "#2a78d6", dark ? "#d95926" : "#eb6834"];
+
+fetch("{% url 'catalog:solarhealth_data' %}")
+  .then((r) => r.json())
+  .then(({ traces }) => {
+    const plotTraces = traces.map((t, i) => ({
+      x: t.x,
+      y: t.y,
+      name: t.name,
+      type: "scatter",
+      mode: "lines",
+      connectgaps: false, // gaps render as gaps
+      line: { width: 2, color: seriesColors[i % seriesColors.length], shape: t.stepped ? "hv" : "linear" },
+      hovertemplate: "%{y:.1f} W/kW · %{x}<extra>" + t.name + "</extra>",
+    }));
+    const layout = {
+      margin: { l: 55, r: 15, t: 10, b: 40 },
+      paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: "system-ui, sans-serif", size: 12, color: ink2 },
+      xaxis: { gridcolor: grid, linecolor: baseline, zeroline: false },
+      yaxis: {
+        title: { text: "W/kW" }, gridcolor: grid, linecolor: baseline,
+        zeroline: true, zerolinecolor: baseline, rangemode: "tozero",
+      },
+      showlegend: plotTraces.length > 1,
+      legend: { orientation: "h", y: 1.08 },
+      hovermode: "x unified",
+    };
+    Plotly.newPlot("chart", plotTraces, layout, { displayModeBar: false, responsive: true });
+  });
+</script>
+{% endblock %}

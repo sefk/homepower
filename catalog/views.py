@@ -8,12 +8,14 @@ here interpolates across a hole or treats missing samples as zero.
 import json
 from datetime import datetime, time, timedelta
 
+from django.conf import settings
+from django.db.models import Min
 from django.http import Http404, JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
 
 from billing.cycles import cycle_label, true_up_cycles
-from billing.models import BillPeriod
+from billing.models import BillPeriod, GasBillPeriod
 from billing.rates import PEAK_END_HOUR, PEAK_START_HOUR, rate_for, rates_for
 from core import coverage
 from core.aggregate import energy_wh, energy_wh_split
@@ -30,6 +32,25 @@ COSTMAP_DAYS = 30  # /costmap/ heatmap: trailing days
 # quietly read as a cheap hour instead of a missing one. 0.99 (not 1.0)
 # tolerates a collector's own rounding of interval boundaries.
 COSTMAP_MIN_COVERAGE = 0.99
+
+BASELINE_DAYS = 90  # /baseline/ trailing window (PRD: trended over months)
+# Below this, a day's 3-5am window is unknown, not a fake minimum.
+BASELINE_MIN_COVERAGE = 0.9
+SELFUSE_DAYS = 30  # /selfuse/ trailing window
+# Both generation and grid coverage must clear this for a day to render.
+SELFUSE_MIN_COVERAGE = 0.9
+SOLARHEALTH_DAYS = 7  # /solarhealth/ trailing window
+
+# kWh of thermal energy per therm (EIA constant); heat-pump electric kWh =
+# therms * THERM_TO_KWH_THERMAL / COP.
+THERM_TO_KWH_THERMAL = 29.3
+ELECTRIFY_DEFAULT_COP = 3.0
+ELECTRIFY_COP_MIN = 1.5
+ELECTRIFY_COP_MAX = 5.0
+# Rough annual production per installed kW at this latitude (NREL
+# PVWatts-ish figure for the Bay Area) -- used only for the /electrify/
+# array-shortfall estimate, not for any per-instant modeling.
+ARRAY_KWH_PER_KW_YEAR = 1450
 
 # Analysis catalog for the index page (PRD: the catalog is the product).
 # Each entry states the one-sentence question it answers, not a chart type.
@@ -52,6 +73,11 @@ CATALOG_GROUPS = [
                 "url_name": "catalog:costmap",
                 "question": "Which hours cost the money?",
             },
+            {
+                "title": "Electrification modeling",
+                "url_name": "catalog:electrify",
+                "question": "What would winter gas load cost as heat-pump electric, and how big a shortfall would the array have?",
+            },
         ],
     },
     {
@@ -65,12 +91,32 @@ CATALOG_GROUPS = [
         ],
     },
     {
+        "name": "Baseline",
+        "entries": [
+            {
+                "title": "Overnight floor",
+                "url_name": "catalog:baseline",
+                "question": "Is the 3–5am baseline load rising — is something new always-on?",
+            },
+        ],
+    },
+    {
         "name": "Solar",
         "entries": [
             {
                 "title": "Solar production",
                 "url_name": "catalog:solar",
                 "question": "How much are the arrays producing right now, and where's the data missing?",
+            },
+            {
+                "title": "Self-consumption",
+                "url_name": "catalog:selfuse",
+                "question": "How much generation is used on-site vs. exported, and does export timing miss the 4–9pm window?",
+            },
+            {
+                "title": "Solar health",
+                "url_name": "catalog:solarhealth",
+                "question": "Are the arrays performing alike, per kW installed?",
             },
         ],
     },
@@ -95,17 +141,12 @@ WAITING_GROUP = {
         {
             "title": "Peak decomposition",
             "question": "Stacked 4–9pm attribution: EV / hot tub / baseline / unexplained.",
-            "why": "needs the Eagle 3 (sub-minute whole-home demand)",
+            "why": "the Eagle 3 is live, but this needs load-identification models plus more accumulated history",
         },
         {
             "title": "Load signatures",
             "question": "Isolate the hot tub, dryer, and EV charging by their on/off shape.",
-            "why": "needs sub-minute resolution from the Eagle 3",
-        },
-        {
-            "title": "Overnight floor",
-            "question": "Is the 3–5am baseline load rising month over month?",
-            "why": "needs the Eagle 3 for whole-home demand",
+            "why": "the Eagle 3 is live, but this needs load-identification models plus more accumulated history",
         },
         {
             "title": "Clear-sky ratio",
@@ -118,16 +159,6 @@ WAITING_GROUP = {
             "why": "needs multiple years of production history",
         },
         {
-            "title": "Self-consumption",
-            "question": "What fraction of generation is used on-site vs. exported, by season?",
-            "why": "needs the Eagle 3 to net solar against whole-home demand",
-        },
-        {
-            "title": "Export timing vs. peak windows",
-            "question": "Is solar exporting at 1pm while the house imports at 6pm?",
-            "why": "needs the Eagle 3 to net solar against whole-home demand",
-        },
-        {
             "title": "EV charge sessions",
             "question": "What did each charge session cost at the TOU rate in effect?",
             "why": "needs the Tesla Fleet API collector, not yet built",
@@ -136,11 +167,6 @@ WAITING_GROUP = {
             "title": "EV counterfactual",
             "question": "What would those sessions have cost shifted past 9pm?",
             "why": "needs the Tesla Fleet API collector, not yet built",
-        },
-        {
-            "title": "Electrification modeling",
-            "question": "What would winter gas load cost as heat-pump electric, and how big a shortfall would the array have?",
-            "why": "modeled analysis, not yet built",
         },
     ],
 }
@@ -527,3 +553,234 @@ def costmap_data(request):
     return JsonResponse(
         {"days": [d.isoformat() for d in days], "hours": list(range(24)), "z": z}
     )
+
+
+def _baseline_days():
+    """Trailing BASELINE_DAYS local days: the 3-5am minimum demand_w, but
+    only for days whose 3-5am coverage clears BASELINE_MIN_COVERAGE. A day
+    with a hole in that window is None -- a gap in the chart, never a
+    fake minimum (PRD: absence of a sample means unknown, never zero)."""
+    tz = timezone.get_current_timezone()
+    series = Series.objects.filter(source__kind=Source.Kind.GRID, metric="demand_w").first()
+    today = timezone.localdate()
+    days = [today - timedelta(days=i) for i in range(BASELINE_DAYS - 1, -1, -1)]
+
+    labels, mins = [], []
+    qualifying = 0
+    if series:
+        for day in days:
+            start = datetime.combine(day, time(hour=3), tzinfo=tz)
+            end = datetime.combine(day, time(hour=5), tzinfo=tz)
+            labels.append(day.isoformat())
+            if coverage.covered_fraction(series, start, end) >= BASELINE_MIN_COVERAGE:
+                min_w = Sample.objects.filter(
+                    series=series, ts__gte=start, ts__lt=end
+                ).aggregate(Min("value"))["value__min"]
+                mins.append(min_w)
+                qualifying += 1
+            else:
+                mins.append(None)
+    return labels, mins, qualifying
+
+
+def baseline(request):
+    """Is the overnight floor rising -- is something new always-on? 3-5am
+    minimum demand, trended over the trailing 90 days."""
+    _, _, qualifying = _baseline_days()
+    return render(
+        request,
+        "catalog/baseline.html",
+        {"section": "catalog", "has_data": qualifying > 0, "window_days": BASELINE_DAYS},
+    )
+
+
+def baseline_data(request):
+    labels, mins, qualifying = _baseline_days()
+    return JsonResponse({"days": labels, "min_w": mins, "qualifying_days": qualifying})
+
+
+def _electrify_cop(request):
+    """?cop= clamped to [ELECTRIFY_COP_MIN, ELECTRIFY_COP_MAX]. A missing
+    or unparseable value falls back to the default rather than 404ing --
+    this is a modeling knob, not a navigable resource."""
+    try:
+        cop = float(request.GET.get("cop", ELECTRIFY_DEFAULT_COP))
+    except ValueError:
+        cop = ELECTRIFY_DEFAULT_COP
+    return max(ELECTRIFY_COP_MIN, min(ELECTRIFY_COP_MAX, cop))
+
+
+def electrify(request):
+    """What would winter gas heat cost as electric, and can the array
+    carry it? Modeled entirely from seeded gas/electric bills -- no live
+    data needed."""
+    return render(
+        request, "catalog/electrify.html", {"section": "catalog", "cop": _electrify_cop(request)}
+    )
+
+
+def electrify_data(request):
+    cop = _electrify_cop(request)
+    bills_by_month = {
+        (p.end_date.year, p.end_date.month): p for p in BillPeriod.objects.all()
+    }
+
+    labels, therms, heat_pump_kwh, net_kwh = [], [], [], []
+    annual_kwh = 0.0
+    for g in GasBillPeriod.objects.order_by("end_date"):
+        kwh = g.therms * THERM_TO_KWH_THERMAL / cop
+        labels.append(g.end_date.isoformat())
+        therms.append(g.therms)
+        heat_pump_kwh.append(kwh)
+        annual_kwh += kwh
+        # Gas and electric bill cycles don't share boundaries; matched by
+        # end-month as an approximation (template footer notes this).
+        match = bills_by_month.get((g.end_date.year, g.end_date.month))
+        net_kwh.append(match.net_kwh if match else None)
+
+    return JsonResponse(
+        {
+            "labels": labels,
+            "therms": therms,
+            "heat_pump_kwh": heat_pump_kwh,
+            "net_kwh": net_kwh,
+            "cop": cop,
+            "annual_heat_pump_kwh": annual_kwh,
+            "shortfall_kw": annual_kwh / ARRAY_KWH_PER_KW_YEAR,
+        }
+    )
+
+
+def _selfuse_day(day, tz, solar_series, grid_series):
+    """generation/export/self-use for one local day, or None if either
+    side's coverage misses SELFUSE_MIN_COVERAGE -- never a partial number
+    passed off as the whole day."""
+    day_start = datetime.combine(day, time.min, tzinfo=tz)
+    day_end = day_start + timedelta(days=1)
+
+    generation_wh = 0.0
+    gen_coverage = 0.0
+    if solar_series:
+        gen_coverage = 1.0
+        for series in solar_series:
+            result = energy_wh(series, day_start, day_end)
+            generation_wh += result.wh
+            # Weakest-covered array sets the day's generation coverage --
+            # a good ADU day can't paper over a bad SolarEdge day.
+            gen_coverage = min(gen_coverage, result.coverage)
+
+    grid_coverage = 0.0
+    exported_wh = 0.0
+    if grid_series:
+        split = energy_wh_split(grid_series, day_start, day_end)
+        exported_wh = split.exported_wh
+        grid_coverage = split.coverage
+
+    if gen_coverage < SELFUSE_MIN_COVERAGE or grid_coverage < SELFUSE_MIN_COVERAGE:
+        return None
+
+    self_used_wh = max(generation_wh - exported_wh, 0.0)
+    fraction = self_used_wh / generation_wh if generation_wh > 0 else None
+    return {
+        "generation_wh": generation_wh,
+        "exported_wh": exported_wh,
+        "self_used_wh": self_used_wh,
+        "fraction": fraction,
+    }
+
+
+def _most_recent_covered_grid_day(tz, grid_series, lookback_days=SELFUSE_DAYS):
+    """Most recent local day with near-complete grid coverage, for the
+    companion export-timing chart -- None if nothing qualifies yet."""
+    if not grid_series:
+        return None
+    today = timezone.localdate()
+    for i in range(lookback_days):
+        day = today - timedelta(days=i)
+        day_start = datetime.combine(day, time.min, tzinfo=tz)
+        day_end = day_start + timedelta(days=1)
+        if coverage.covered_fraction(grid_series, day_start, day_end) >= SELFUSE_MIN_COVERAGE:
+            return day
+    return None
+
+
+def selfuse(request):
+    """How much generation is used on-site vs. exported? Stacked
+    self-used/exported per day over the trailing month, plus a companion
+    hourly chart shading the 4-9pm window for the most recent
+    fully-covered day (export timing vs. peak windows, PRD)."""
+    tz = timezone.get_current_timezone()
+    grid_series = Series.objects.filter(source__kind=Source.Kind.GRID, metric="demand_w").first()
+    return render(
+        request,
+        "catalog/selfuse.html",
+        {
+            "section": "catalog",
+            # PRD's main array is SolarEdge; until that source exists the
+            # ADU (Envoy) is the whole picture.
+            "solaredge_live": Source.objects.filter(slug="solaredge").exists(),
+            "recent_day": _most_recent_covered_grid_day(tz, grid_series),
+        },
+    )
+
+
+def selfuse_data(request):
+    tz = timezone.get_current_timezone()
+    today = timezone.localdate()
+    days = [today - timedelta(days=i) for i in range(SELFUSE_DAYS - 1, -1, -1)]
+    solar_series = list(
+        Series.objects.filter(source__kind=Source.Kind.SOLAR, metric="production_w")
+    )
+    grid_series = Series.objects.filter(source__kind=Source.Kind.GRID, metric="demand_w").first()
+
+    labels, self_used, exported, fractions = [], [], [], []
+    for day in days:
+        labels.append(day.isoformat())
+        result = _selfuse_day(day, tz, solar_series, grid_series)
+        self_used.append(result["self_used_wh"] if result else None)
+        exported.append(result["exported_wh"] if result else None)
+        fractions.append(result["fraction"] if result else None)
+
+    return JsonResponse(
+        {"days": labels, "self_used_wh": self_used, "exported_wh": exported, "fraction": fractions}
+    )
+
+
+# Installed capacity per source slug, for /solarhealth/'s W/kW
+# normalization. Only sources with a known figure here get scaled.
+_SOLAR_KW_BY_SLUG = {"envoy": settings.SOLAR_ADU_KW, "solaredge": settings.SOLAR_MAIN_KW}
+
+
+def solarhealth(request):
+    """Are the arrays performing alike, per kW installed? Two arrays, two
+    vendors, one axis -- divergence is the signal (PRD "Solar health")."""
+    return render(
+        request,
+        "catalog/solarhealth.html",
+        {
+            "section": "catalog",
+            "comparison_active": Source.objects.filter(slug="solaredge").exists(),
+            "adu_kw": settings.SOLAR_ADU_KW,
+            "main_kw": settings.SOLAR_MAIN_KW,
+        },
+    )
+
+
+def solarhealth_data(request):
+    tz = timezone.get_current_timezone()
+    end = datetime.combine(timezone.localdate() + timedelta(days=1), time.min, tzinfo=tz)
+    start = end - timedelta(days=SOLARHEALTH_DAYS)
+
+    # Ordered explicitly so this queryset's iteration order matches the
+    # one _traces uses internally -- the zip below relies on that.
+    series_qs = Series.objects.filter(
+        source__kind=Source.Kind.SOLAR, metric="production_w"
+    ).order_by("source__slug")
+    traces = _traces(series_qs, start, end)
+    for t, series in zip(traces, series_qs.select_related("source")):
+        kw = _SOLAR_KW_BY_SLUG.get(series.source.slug)
+        if kw:
+            t["y"] = [v / kw if v is not None else None for v in t["y"]]
+            t["name"] = f"{series.source.name} — W/kW"
+
+    return JsonResponse({"traces": traces})

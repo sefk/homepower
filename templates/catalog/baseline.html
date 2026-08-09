@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Overnight floor{% endblock %}
+
+{% block head %}
+<script src="/static/vendor/plotly.min.js"></script>
+<style>
+#chart { width: 100%; height: 420px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Overnight floor</h1>
+
+{% if has_data %}
+<div class="card">
+  <div id="chart"></div>
+  <p class="small muted" style="margin-bottom:0">
+    Minimum whole-home demand in the 3–5am local window, per day, over the trailing
+    {{ window_days }} days. A day only plots when that window's coverage is at least 90% —
+    a night with a hole in it shows as a gap, never a fake minimum. A rising floor means
+    something new is always-on, and it's the cheapest kWh anyone ever saves.
+  </p>
+</div>
+{% else %}
+<div class="card">
+  <p class="muted" style="margin-bottom:0">
+    Not enough overnight data yet — no day in the trailing {{ window_days }} has 90% or
+    better coverage of the 3–5am window. The Eagle 3 has only been live for about a day;
+    this fills in as history accumulates.
+  </p>
+</div>
+{% endif %}
+
+<script>
+const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+const ink2 = dark ? "#c3c2b7" : "#52514e";
+const grid = dark ? "#2c2c2a" : "#e1e0d9";
+const baseline = dark ? "#383835" : "#c3c2b7";
+const floorColor = dark ? "#3987e5" : "#2a78d6";
+
+fetch("{% url 'catalog:baseline_data' %}")
+  .then((r) => r.json())
+  .then(({ days, min_w }) => {
+    if (!days.length) return;
+    const trace = {
+      x: days,
+      y: min_w,
+      type: "scatter",
+      mode: "lines+markers",
+      connectgaps: false, // gaps render as gaps
+      line: { width: 2, color: floorColor },
+      marker: { size: 4 },
+      hovertemplate: "%{y:.0f} W · %{x}<extra></extra>",
+    };
+    const layout = {
+      margin: { l: 55, r: 15, t: 10, b: 40 },
+      paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: "system-ui, sans-serif", size: 12, color: ink2 },
+      xaxis: { gridcolor: grid, linecolor: baseline, zeroline: false },
+      yaxis: {
+        title: { text: "W" },
+        gridcolor: grid,
+        linecolor: baseline,
+        zeroline: true,
+        zerolinecolor: ink2,
+        zerolinewidth: 1,
+        rangemode: "tozero",
+      },
+      showlegend: false,
+      hovermode: "x unified",
+    };
+    Plotly.newPlot("chart", [trace], layout, { displayModeBar: false, responsive: true });
+  });
+</script>
+{% endblock %}

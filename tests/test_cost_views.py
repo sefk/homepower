@@ -54,7 +54,9 @@ class TestIndex:
         # not-yet-built views are present but dimmed, with a reason
         assert "Peak decomposition" in content
         assert "EV charge sessions" in content
-        assert "needs the Eagle 3" in content
+        assert "needs the Tesla Fleet API collector" in content
+        # the Eagle 3 is live now; stale hardware-gated reasons are gone
+        assert "needs the Eagle 3" not in content
 
     def test_entries_link_to_their_views(self, db, client):
         resp = client.get("/")

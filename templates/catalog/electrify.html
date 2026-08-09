@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Electrification modeling{% endblock %}
+
+{% block head %}
+<script src="/static/vendor/plotly.min.js"></script>
+<style>
+.controls {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+.controls a { color: var(--series-1); text-decoration: none; }
+.controls .sep { color: var(--grid); }
+#chart { width: 100%; height: 420px; }
+.stat { font-size: 0.95rem; margin: 0 0 1.25rem; }
+.stat strong { font-variant-numeric: tabular-nums; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Electrification modeling</h1>
+
+<div class="controls">
+  <span class="muted">heat-pump COP:</span>
+  {% if cop == 2.5 %}<strong>2.5</strong>{% else %}<a href="?cop=2.5">2.5</a>{% endif %}
+  <span class="sep">·</span>
+  {% if cop == 3.0 %}<strong>3.0</strong>{% else %}<a href="?cop=3.0">3.0</a>{% endif %}
+  <span class="sep">·</span>
+  {% if cop == 3.5 %}<strong>3.5</strong>{% else %}<a href="?cop=3.5">3.5</a>{% endif %}
+</div>
+
+<div class="card">
+  <div id="chart"></div>
+  <p class="small muted" style="margin-bottom:0">
+    Bars: each winter gas bill's therms converted to heat-pump electric load
+    (kWh = therms &times; 29.3 kWh-thermal/therm &divide; COP) against that month's actual
+    net grid kWh from the electric bills. Gas and electric bill cycles don't share
+    boundaries — each gas period is matched to the electric period whose bill ends in the
+    same month, an approximation, not an exact overlap.
+  </p>
+</div>
+
+<p class="stat" id="shortfall"></p>
+
+<p class="small muted">
+  All from seeded historical bills (docs/635-central-energy-analysis-gemini.md) — no live
+  data needed.
+</p>
+
+<script>
+const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+const ink2 = dark ? "#c3c2b7" : "#52514e";
+const grid = dark ? "#2c2c2a" : "#e1e0d9";
+const baseline = dark ? "#383835" : "#c3c2b7";
+const heatPumpColor = dark ? "#d95926" : "#eb6834";
+const netColor = dark ? "#3987e5" : "#2a78d6";
+
+fetch("{% url 'catalog:electrify_data' %}?cop={{ cop }}")
+  .then((r) => r.json())
+  .then(({ labels, heat_pump_kwh, net_kwh, cop, annual_heat_pump_kwh, shortfall_kw }) => {
+    const layout = {
+      barmode: "group",
+      margin: { l: 55, r: 15, t: 10, b: 60 },
+      paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: "system-ui, sans-serif", size: 12, color: ink2 },
+      xaxis: { gridcolor: grid, linecolor: baseline, zeroline: false, type: "category" },
+      yaxis: {
+        title: { text: "kWh" },
+        gridcolor: grid,
+        linecolor: baseline,
+        zeroline: true,
+        zerolinecolor: ink2,
+        zerolinewidth: 1,
+      },
+      showlegend: true,
+      legend: { orientation: "h", y: 1.08 },
+      hovermode: "x unified",
+    };
+    Plotly.newPlot(
+      "chart",
+      [
+        {
+          x: labels, y: heat_pump_kwh, name: `modeled heat-pump load (COP ${cop.toFixed(1)})`,
+          type: "bar", marker: { color: heatPumpColor },
+        },
+        {
+          x: labels, y: net_kwh, name: "actual net grid kWh (matched month)",
+          type: "bar", marker: { color: netColor },
+        },
+      ],
+      layout,
+      { displayModeBar: false, responsive: true },
+    );
+
+    document.getElementById("shortfall").innerHTML =
+      `At COP ${cop.toFixed(1)}, modeled annual heat-pump load is ` +
+      `<strong>${annual_heat_pump_kwh.toFixed(0)} kWh</strong>. At an assumed ` +
+      `<strong>1,450 kWh/kW-year</strong> (NREL-ish figure for this latitude), the array ` +
+      `would need about <strong>${shortfall_kw.toFixed(2)} kW</strong> more panels to carry it.`;
+  });
+</script>
+{% endblock %}
