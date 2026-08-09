@@ -36,6 +36,9 @@ def _overlapping_watt_seconds(series: Series, start: datetime, end: datetime):
     whole duration to the window containing its start — inflating one
     aggregation bucket and deflating its neighbor.
     """
+    from .coverage import _utc
+
+    start, end = _utc(start), _utc(end)
     samples = Sample.objects.filter(
         series=series,
         ts__gte=start - timedelta(seconds=_MAX_SAMPLE_S),

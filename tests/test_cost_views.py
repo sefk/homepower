@@ -279,6 +279,49 @@ class TestCostmapData:
         assert data["z"][6][di] == pytest.approx(0.5 * WINTER_OFFPEAK)
 
 
+class TestCostmapDst:
+    """DST transition days: documented behavior, locked in.
+
+    Spring-forward 2am doesn't exist — zero-width window, coverage 0.0,
+    below the floor, null. Fall-back 1am spans both passes; the cell is a
+    dollar *total*, so charging both real hours to the wall-clock hour is
+    truthful (footer says so).
+    """
+
+    def test_spring_forward_2am_is_null(self, grid_series, client, monkeypatch):
+        frozen_today = date(2026, 3, 8)  # spring-forward date
+        monkeypatch.setattr("catalog.views.timezone.localdate", lambda: frozen_today)
+        # cover the whole day generously so only the phantom hour can be null
+        day_start = la(2026, 3, 8, 0, 0)
+        record_coverage(
+            grid_series, day_start, day_start + timedelta(hours=26), CoverageSpan.State.LIVE
+        )
+        Sample.objects.create(series=grid_series, ts=day_start, duration_s=3600, value=1000.0)
+
+        data = client.get("/costmap/data.json").json()
+        di = data["days"].index("2026-03-08")
+        assert data["z"][2][di] is None  # nonexistent hour, never $0.00
+
+    def test_fall_back_1am_totals_both_passes(self, grid_series, client, monkeypatch):
+        from zoneinfo import ZoneInfo
+
+        frozen_today = date(2026, 11, 1)  # fall-back date
+        monkeypatch.setattr("catalog.views.timezone.localdate", lambda: frozen_today)
+        tz = ZoneInfo("America/Los_Angeles")
+        first = datetime(2026, 11, 1, 1, 0, tzinfo=tz, fold=0)   # PDT pass
+        second = datetime(2026, 11, 1, 1, 0, tzinfo=tz, fold=1)  # PST pass
+        for ts in (first, second):
+            Sample.objects.create(series=grid_series, ts=ts, duration_s=3600, value=1000.0)
+        record_coverage(
+            grid_series, first, second + timedelta(hours=1), CoverageSpan.State.LIVE
+        )
+
+        data = client.get("/costmap/data.json").json()
+        di = data["days"].index("2026-11-01")
+        # 2 kWh total across the repeated hour at the winter off-peak rate
+        assert data["z"][1][di] == pytest.approx(2.0 * WINTER_OFFPEAK)
+
+
 class TestCostmapPage:
     def test_renders(self, db, client):
         resp = client.get("/costmap/")
