@@ -47,6 +47,41 @@ def record_coverage(
     return CoverageSpan.objects.create(series=series, start=start, end=end, state=state)
 
 
+def clear_coverage(series: Series, start: datetime, end: datetime, state: str) -> None:
+    """Remove [start, end) from `state` spans, revising rather than voiding.
+
+    A span that only partly overlaps [start, end) is trimmed, not deleted:
+    one extending left of `start` keeps [span.start, start); one extending
+    right of `end` keeps [end, span.end); one straddling both sides splits
+    into both pieces. A span fully inside [start, end) is deleted outright.
+    Spans of any other state are untouched — this revises what `state`
+    alone claims to know (e.g. a corrected backfill re-import), never a
+    collector's own LIVE knowledge.
+    """
+    start, end = _utc(start), _utc(end)
+    if end <= start:
+        raise ValueError(f"empty or inverted span: {start} .. {end}")
+
+    affected = CoverageSpan.objects.filter(
+        series=series, state=state, start__lt=end, end__gt=start
+    )
+    for span in list(affected):
+        left_trim = span.start < start
+        right_trim = span.end > end
+        if left_trim and right_trim:
+            CoverageSpan.objects.create(series=series, start=span.start, end=start, state=state)
+            CoverageSpan.objects.create(series=series, start=end, end=span.end, state=state)
+            span.delete()
+        elif left_trim:
+            span.end = start
+            span.save(update_fields=["end"])
+        elif right_trim:
+            span.start = end
+            span.save(update_fields=["start"])
+        else:
+            span.delete()
+
+
 def spans(series: Series, start: datetime, end: datetime) -> list[CoverageSpan]:
     """Coverage spans intersecting [start, end), ordered by start."""
     start, end = _utc(start), _utc(end)

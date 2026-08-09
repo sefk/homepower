@@ -1,7 +1,7 @@
 """Green Button CSV import: header scanning, column variants, duration
 inference, DST fold, idempotency, coverage, and grid_hourly_wh."""
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 from django.core.management import call_command
@@ -96,6 +96,27 @@ def _full_day_single_usage_csv(date_str, hourly_kwh=0.500):
         end = f"{(h + 1) % 24:02d}:00"
         lines.append(f"Electric usage,{date_str},{start},{end},{hourly_kwh:.3f},kWh,$0.00")
     return "\n".join(lines) + "\n"
+
+
+def _daily_rows_csv(start_date_str, num_days, daily_kwh=24.0):
+    """One row per day, each spanning the full 24h (00:00 -> 00:00 next
+    day) -- consecutive rows' BACKFILLED spans touch and merge into one
+    continuous multi-day span on import, standing in for a "month-long"
+    backfilled history without generating hundreds of hourly rows."""
+    lines = ["TYPE,DATE,START TIME,END TIME,USAGE,UNITS,COST"]
+    d = datetime.strptime(start_date_str, "%m/%d/%Y").date()
+    for _ in range(num_days):
+        lines.append(f"Electric usage,{d.strftime('%m/%d/%Y')},00:00,00:00,{daily_kwh:.3f},kWh,$0.00")
+        d += timedelta(days=1)
+    return "\n".join(lines) + "\n"
+
+
+def _single_hour_csv(date_str, hour, kwh):
+    end_hour = (hour + 1) % 24
+    return (
+        "TYPE,DATE,START TIME,END TIME,USAGE,UNITS,COST\n"
+        f"Electric usage,{date_str},{hour:02d}:00,{end_hour:02d}:00,{kwh:.3f},kWh,$0.00\n"
+    )
 
 
 @pytest.mark.django_db
@@ -394,3 +415,58 @@ class TestGridHourlyWh:
         result = grid_hourly_wh(t0, t0 + timedelta(hours=1))
         assert result.imported_wh == pytest.approx(150.0)
         assert result.exported_wh == 0.0
+
+    def test_hourly_window_inside_a_24h_row_gets_proportional_energy(self):
+        """Green Button rows can carry daily-granularity durations, unlike
+        every other collector's sub-hour cadence. A fixed 1-hour lookback
+        would miss a same-row sample that started long before the query
+        window but still overlaps it, reading zero energy despite full
+        coverage."""
+        source = self._eagle_source()
+        series = Series.objects.create(source=source, metric="grid_import_wh", unit="Wh")
+
+        t0 = utc(2026, 1, 1, 0, 0)
+        Sample.objects.create(series=series, ts=t0, duration_s=86400, value=2400.0)
+        record_coverage(series, t0, t0 + timedelta(hours=24), CoverageSpan.State.BACKFILLED)
+
+        window_start = t0 + timedelta(hours=2)  # 02:00-03:00, well inside the row
+        window_end = t0 + timedelta(hours=3)
+        result = grid_hourly_wh(window_start, window_end)
+        assert result.imported_wh == pytest.approx(2400.0 * 3600 / 86400)  # 100.0, not 0
+        assert result.coverage == pytest.approx(1.0)
+
+
+@pytest.mark.django_db
+class TestClearCoverageOnReimport:
+    def test_one_hour_correction_does_not_erase_the_rest_of_the_month(self, tmp_path):
+        """A one-hour correction file must only revise its own hour. The
+        blunt "delete every BACKFILLED span the file's range intersects"
+        bug nuked an entire multi-day span for a one-hour touch, leaving
+        the rest of the month unknown until re-backfilled from scratch."""
+        month = _write(tmp_path, "month.csv", _daily_rows_csv("07/01/2026", 5, daily_kwh=24.0))
+        call_command("import_greenbutton", month)
+
+        series = Series.objects.get(metric="grid_import_wh")
+        month_start = utc(2026, 7, 1, 7, 0)  # 00:00 PDT
+        month_end = utc(2026, 7, 6, 7, 0)  # 5 days later
+        assert uncovered(series, month_start, month_end) == []
+
+        # Day 3's 05:00-06:00 gets corrected to a different reading.
+        corrected = _write(tmp_path, "corrected_hour.csv", _single_hour_csv("07/03/2026", 5, 0.750))
+        call_command("import_greenbutton", corrected)
+
+        # Nothing outside the corrected hour became unknown.
+        assert uncovered(series, month_start, month_end) == []
+
+        # The corrected hour actually reflects the new file -- proof it
+        # was really rebuilt, not just coincidentally left alone.
+        corrected_ts = utc(2026, 7, 3, 12, 0)  # 05:00 PDT
+        sample = Sample.objects.get(series=series, ts=corrected_ts)
+        assert sample.value == pytest.approx(750.0)
+        assert sample.duration_s == 3600
+
+        # A day the correction never touched keeps its original reading.
+        untouched_ts = utc(2026, 7, 1, 7, 0)
+        untouched = Sample.objects.get(series=series, ts=untouched_ts)
+        assert untouched.value == pytest.approx(24000.0)
+        assert untouched.duration_s == 86400

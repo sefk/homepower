@@ -8,6 +8,8 @@ Nothing here fills gaps with zeros.
 from datetime import datetime, timedelta
 from typing import NamedTuple
 
+from django.db.models import Max
+
 from .coverage import covered_fraction
 from .models import Sample, Series, Source
 
@@ -95,10 +97,21 @@ def _clipped_energy_wh(series: Series, start: datetime, end: datetime) -> float:
     from .coverage import _utc
 
     start, end = _utc(start), _utc(end)
+    # Green Button rows can carry any duration up to daily granularity
+    # (unlike every other collector's fixed sub-hour cadence), so the
+    # fixed _MAX_SAMPLE_S lookback used elsewhere would miss a sample that
+    # started long before `start` but still overlaps the window -- a
+    # window inside such a row would read zero energy despite full
+    # coverage. Recomputed per call (one cheap aggregate at our volumes)
+    # rather than assumed, since this series has no recorded native
+    # resolution the way Source.native_resolution_s gives other sources.
+    lookback_s = (
+        series.samples.aggregate(Max("duration_s"))["duration_s__max"] or _MAX_SAMPLE_S
+    )
     total = 0.0
     samples = Sample.objects.filter(
         series=series,
-        ts__gte=start - timedelta(seconds=_MAX_SAMPLE_S),
+        ts__gte=start - timedelta(seconds=lookback_s),
         ts__lt=end,
     )
     for s in samples.iterator():

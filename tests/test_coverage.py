@@ -49,6 +49,50 @@ class TestRecordCoverage:
             coverage.record_coverage(series, utc(2026, 8, 1, 10, 0), utc(2026, 8, 1, 10, 0), LIVE)
 
 
+class TestClearCoverage:
+    def test_trims_span_extending_left_of_start(self, series):
+        coverage.record_coverage(series, utc(2026, 8, 1, 9, 0), utc(2026, 8, 1, 11, 0), BACKFILLED)
+        coverage.clear_coverage(series, utc(2026, 8, 1, 10, 0), utc(2026, 8, 1, 12, 0), BACKFILLED)
+        span = CoverageSpan.objects.get()
+        assert (span.start, span.end) == (utc(2026, 8, 1, 9, 0), utc(2026, 8, 1, 10, 0))
+
+    def test_trims_span_extending_right_of_end(self, series):
+        coverage.record_coverage(series, utc(2026, 8, 1, 10, 0), utc(2026, 8, 1, 13, 0), BACKFILLED)
+        coverage.clear_coverage(series, utc(2026, 8, 1, 9, 0), utc(2026, 8, 1, 11, 0), BACKFILLED)
+        span = CoverageSpan.objects.get()
+        assert (span.start, span.end) == (utc(2026, 8, 1, 11, 0), utc(2026, 8, 1, 13, 0))
+
+    def test_splits_a_fully_straddling_span(self, series):
+        coverage.record_coverage(series, utc(2026, 8, 1, 0, 0), utc(2026, 8, 2, 0, 0), BACKFILLED)
+        coverage.clear_coverage(series, utc(2026, 8, 1, 10, 0), utc(2026, 8, 1, 11, 0), BACKFILLED)
+        spans = list(CoverageSpan.objects.order_by("start"))
+        assert len(spans) == 2
+        assert (spans[0].start, spans[0].end) == (utc(2026, 8, 1, 0, 0), utc(2026, 8, 1, 10, 0))
+        assert (spans[1].start, spans[1].end) == (utc(2026, 8, 1, 11, 0), utc(2026, 8, 2, 0, 0))
+
+    def test_deletes_a_fully_contained_span(self, series):
+        coverage.record_coverage(series, utc(2026, 8, 1, 10, 0), utc(2026, 8, 1, 10, 30), BACKFILLED)
+        coverage.clear_coverage(series, utc(2026, 8, 1, 9, 0), utc(2026, 8, 1, 12, 0), BACKFILLED)
+        assert CoverageSpan.objects.count() == 0
+
+    def test_wrong_state_is_untouched(self, series):
+        coverage.record_coverage(series, utc(2026, 8, 1, 10, 0), utc(2026, 8, 1, 11, 0), LIVE)
+        coverage.clear_coverage(series, utc(2026, 8, 1, 10, 0), utc(2026, 8, 1, 11, 0), BACKFILLED)
+        span = CoverageSpan.objects.get()
+        assert span.state == LIVE
+        assert (span.start, span.end) == (utc(2026, 8, 1, 10, 0), utc(2026, 8, 1, 11, 0))
+
+    def test_disjoint_span_is_untouched(self, series):
+        coverage.record_coverage(series, utc(2026, 8, 1, 0, 0), utc(2026, 8, 1, 1, 0), BACKFILLED)
+        coverage.clear_coverage(series, utc(2026, 8, 1, 10, 0), utc(2026, 8, 1, 11, 0), BACKFILLED)
+        span = CoverageSpan.objects.get()
+        assert (span.start, span.end) == (utc(2026, 8, 1, 0, 0), utc(2026, 8, 1, 1, 0))
+
+    def test_empty_span_rejected(self, series):
+        with pytest.raises(ValueError):
+            coverage.clear_coverage(series, utc(2026, 8, 1, 10, 0), utc(2026, 8, 1, 10, 0), BACKFILLED)
+
+
 class TestGaps:
     def test_restart_gap_reads_as_unknown(self, series):
         """The collector was down 10:05–14:00; that hole must surface as a gap."""

@@ -32,7 +32,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from collectors.eagle import ensure_source
-from core.coverage import record_coverage
+from core.coverage import clear_coverage, record_coverage
 from core.models import CoverageSpan, Sample, Series
 
 # PG&E's DATE + TIME columns, tried in order.
@@ -284,40 +284,45 @@ class Command(BaseCommand):
             else:
                 row.duration_s = _FALLBACK_DURATION_S
 
-        # Per series, the [min, max) real-time range this file actually
-        # writes samples for — used to make re-import authoritative for
-        # that range, not just additive.
-        ranges: dict[str, tuple[datetime, datetime]] = {}
-        for row in parsed:
-            row_start = row.ts.astimezone(dt_timezone.utc)
-            row_end = row_start + timedelta(seconds=row.duration_s)
-            for metric, _ in row.values:
-                lo, hi = ranges.get(metric, (row_start, row_end))
-                ranges[metric] = (min(lo, row_start), max(hi, row_end))
-
         created = updated = 0
         ts_min = ts_max = None
         with transaction.atomic():
-            # A corrected re-import (e.g. an hour-long row replaced by the
-            # real 15-minute one) fixes the Sample via update_or_create
-            # below, but stale BACKFILLED coverage from the earlier import
-            # would otherwise survive and claim the now-vacated 45 minutes
-            # are still known. Clearing BACKFILLED spans this file's range
-            # touches — never LIVE, which is the collector's own knowledge,
-            # not this command's to revise — makes re-import fully
-            # authoritative for what it actually describes; the loop below
-            # then rebuilds coverage from scratch, purely from rows written.
-            for metric, (lo, hi) in ranges.items():
-                CoverageSpan.objects.filter(
-                    series=series_by_metric[metric],
-                    state=CoverageSpan.State.BACKFILLED,
-                    start__lt=hi,
-                    end__gt=lo,
-                ).delete()
-
             for row in parsed:
+                # Adding a timedelta to an aware zoneinfo datetime silently
+                # drops fold and can reinterpret the result at the wrong
+                # UTC offset near a DST edge (REVIEW-INSIGHTS: convert to
+                # UTC before duration math) — so convert first, then add.
+                ts_utc = row.ts.astimezone(dt_timezone.utc)
+                new_end = ts_utc + timedelta(seconds=row.duration_s)
                 for metric, wh in row.values:
                     series = series_by_metric[metric]
+
+                    # A corrected re-import (e.g. an hour-long row replaced
+                    # by the real 15-minute one) fixes the Sample via
+                    # update_or_create below, but stale BACKFILLED coverage
+                    # the OLD duration justified would otherwise survive
+                    # past the new, shorter one. clear_coverage revises
+                    # BACKFILLED knowledge for exactly [ts, end) this
+                    # sample claims — the new end, or the old one if it
+                    # reached further — trimming or splitting spans that
+                    # extend beyond that rather than deleting them
+                    # outright. That keeps the retraction scoped to this
+                    # one reading: a one-row correction inside a
+                    # month-long backfilled span (itself built from many
+                    # touching rows) doesn't erase the rest of that month,
+                    # since every other row's own [ts, end) is untouched.
+                    # Never touches LIVE, which is the collector's own
+                    # knowledge, not this command's to revise.
+                    existing = (
+                        Sample.objects.filter(series=series, ts=row.ts)
+                        .values_list("duration_s", flat=True)
+                        .first()
+                    )
+                    clear_end = new_end
+                    if existing is not None:
+                        clear_end = max(clear_end, ts_utc + timedelta(seconds=existing))
+                    clear_coverage(series, ts_utc, clear_end, CoverageSpan.State.BACKFILLED)
+
                     _, was_created = Sample.objects.update_or_create(
                         series=series,
                         ts=row.ts,
@@ -326,18 +331,7 @@ class Command(BaseCommand):
                     created += was_created
                     updated += not was_created
                     totals[metric] += wh
-                    # Adding a timedelta to an aware zoneinfo datetime
-                    # silently drops fold and can reinterpret the result at
-                    # the wrong UTC offset near a DST edge (REVIEW-INSIGHTS:
-                    # convert to UTC before duration math) — so convert
-                    # first, then add.
-                    ts_utc = row.ts.astimezone(dt_timezone.utc)
-                    record_coverage(
-                        series,
-                        ts_utc,
-                        ts_utc + timedelta(seconds=row.duration_s),
-                        CoverageSpan.State.BACKFILLED,
-                    )
+                    record_coverage(series, ts_utc, new_end, CoverageSpan.State.BACKFILLED)
                 ts_min = row.ts if ts_min is None else min(ts_min, row.ts)
                 ts_max = row.ts if ts_max is None else max(ts_max, row.ts)
 
