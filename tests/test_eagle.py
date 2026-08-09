@@ -128,8 +128,9 @@ class TestEndpoint:
         assert span.start == utc(2025, 6, 27, 0, 10, 40)  # delta is exact knowledge
 
     def test_garbage_records_failed_run_and_saves_body(
-        self, transactional_db, client, settings
+        self, transactional_db, client, settings, tmp_path
     ):
+        settings.VAR_DIR = tmp_path  # keep test artifacts out of the real var/
         resp = client.post(
             "/ingest/eagle/", b"\x00garbage", content_type="application/octet-stream"
         )
