@@ -9,4 +9,6 @@ urlpatterns = [
     path("health/", views.health, name="health"),
     path("solar/", views.solar, name="solar"),
     path("solar/data.json", views.solar_data, name="solar_data"),
+    path("grid/", views.grid, name="grid"),
+    path("grid/data.json", views.grid_data, name="grid_data"),
 ]

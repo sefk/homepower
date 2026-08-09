@@ -12,7 +12,7 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 
 from core import coverage
-from core.aggregate import energy_wh
+from core.aggregate import energy_wh, energy_wh_split
 from core.models import CollectorRun, Sample, Series, Source
 
 # A source is stale when it has been silent this many poll intervals.
@@ -57,6 +57,7 @@ def health(request):
         sources.append(
             {
                 "source": source,
+                "push": source.slug == "eagle",  # push sources have no poll loop
                 "series_rows": series_rows,
                 "last_sample": last_sample,
                 "stale": last_sample is None or now - last_sample.ts > stale_after,
@@ -79,7 +80,7 @@ def health(request):
     )
 
 
-def _solar_window(request):
+def _window(request):
     """Resolve ?date= (local) and ?range=day|week to an aware UTC window."""
     tz = timezone.get_current_timezone()
     date_param = request.GET.get("date")
@@ -100,7 +101,7 @@ def _solar_window(request):
 
 def solar(request):
     """ADU solar production; hourly table twin rides along."""
-    day, span, days, start, end = _solar_window(request)
+    day, span, days, start, end = _window(request)
 
     hours = []
     series = Series.objects.filter(
@@ -133,16 +134,11 @@ def solar(request):
     )
 
 
-def solar_data(request):
-    """Plotly payload. Gaps become nulls so lines break instead of bridging."""
-    _, _, _, start, end = _solar_window(request)
+def _traces(series_qs, start, end):
+    """Plotly traces. Gaps become nulls so lines break instead of bridging."""
     tz = timezone.get_current_timezone()
-
     traces = []
-    solar_series = Series.objects.filter(source__kind=Source.Kind.SOLAR).select_related(
-        "source"
-    )
-    for series in solar_series:
+    for series in series_qs.select_related("source"):
         resolution = series.source.native_resolution_s
         xs, ys = [], []
         prev_ts = None
@@ -168,5 +164,53 @@ def solar_data(request):
                 "resolution_s": resolution,
             }
         )
+    return traces
 
-    return JsonResponse({"traces": traces})
+
+def solar_data(request):
+    _, _, _, start, end = _window(request)
+    return JsonResponse(
+        {"traces": _traces(Series.objects.filter(source__kind=Source.Kind.SOLAR), start, end)}
+    )
+
+
+def grid(request):
+    """Whole-home grid demand; hourly import/export table twin rides along."""
+    day, span, days, start, end = _window(request)
+
+    hours = []
+    series = Series.objects.filter(
+        source__kind=Source.Kind.GRID, metric="demand_w"
+    ).first()
+    if series and days == 1:
+        for h in range(24):
+            h_start = start + timedelta(hours=h)
+            result = energy_wh_split(series, h_start, h_start + timedelta(hours=1))
+            hours.append(
+                {
+                    "hour": h_start,
+                    "imported_wh": result.imported_wh,
+                    "exported_wh": result.exported_wh,
+                    "coverage_pct": 100 * result.coverage,
+                }
+            )
+
+    return render(
+        request,
+        "catalog/grid.html",
+        {
+            "section": "grid",
+            "day": day,
+            "range": span,
+            "prev_day": day - timedelta(days=days),
+            "next_day": day + timedelta(days=days),
+            "today": timezone.localdate(),
+            "hours": hours,
+        },
+    )
+
+
+def grid_data(request):
+    _, _, _, start, end = _window(request)
+    series_qs = Series.objects.filter(source__kind=Source.Kind.GRID, metric="demand_w")
+    return JsonResponse({"traces": _traces(series_qs, start, end)})

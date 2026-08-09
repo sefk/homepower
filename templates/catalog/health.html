@@ -116,7 +116,7 @@
     {% else %}
       No samples yet
     {% endif %}
-    · polls every {{ row.source.poll_interval_s }}s
+    · {% if row.push %}pushes every ~{{ row.source.poll_interval_s }}s{% else %}polls every {{ row.source.poll_interval_s }}s{% endif %}
   </p>
 
   {% if row.failures %}
