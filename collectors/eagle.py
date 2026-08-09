@@ -30,6 +30,10 @@ logger = logging.getLogger(__name__)
 
 Y2K = datetime(2000, 1, 1, tzinfo=dt_timezone.utc)
 UNPARSED_KEEP = 20
+# ZigBee SE metering "reading unavailable" sentinel: 0x800000 as signed
+# 24-bit (arrives sign-extended to 0xff800000). Not a measurement — the
+# meter saying "unknown", which for us means no sample at all.
+DEMAND_SENTINEL = 0x800000
 
 
 def _hex_int(text: str, bits: int | None = None) -> int:
@@ -75,6 +79,9 @@ def parse_rfa(body: bytes) -> list[Reading]:
     for name, block in blocks:
         try:
             if name == "InstantaneousDemand":
+                if abs(_hex_int(block["Demand"], bits=32)) == DEMAND_SENTINEL:
+                    logger.debug("eagle: demand sentinel (no reading), skipping")
+                    continue
                 readings.append(
                     Reading(
                         metric="demand_w",

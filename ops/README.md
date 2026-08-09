@@ -48,6 +48,37 @@ launchctl kickstart -k gui/$(id -u)/com.sefk.homepower
 Expect to redo this if the python interpreter path changes (e.g. a uv
 python upgrade).
 
+## Eagle 3 uploader (grid source)
+
+The Eagle (10.10.0.216) pushes RFA XML to `POST /ingest/eagle/` via a
+"custom uploader" configured over its local API. Its network-setup web
+UI has **no uploader page**; the uploader command set lives behind
+`/cgi-bin/post_manager` (basic auth: Cloud ID / Install Code, both in
+`.env` from the label on the unit). Commands need a unique `<Id>`.
+
+Registered with (note the **doubled leading slash** — the firmware
+strips one, and without a stored leading slash it builds a broken URL
+and fails with `LastResponseCode 0`, silently):
+
+```sh
+source .env
+curl -u "$EAGLE_CLOUD_ID:$EAGLE_INSTALL_CODE" -H "Content-Type: text/xml" \
+  -d "<Command><Name>uploader_add</Name><Id>0x$(date +%s)</Id>\
+<uploader>homepower</uploader><provider>homepower</provider>\
+<description>homepower on studio</description><format>XML:RAW</format>\
+<hostname>10.10.0.200</hostname><url>//ingest/eagle/</url><port>8425</port>\
+<enabled>Y</enabled><uploadSize>0</uploadSize><protocol>http</protocol>\
+<compression>N</compression><encode>N</encode><UploadPeriod></UploadPeriod>\
+<autoselect>true</autoselect></Command>" \
+  http://10.10.0.216/cgi-bin/post_manager
+```
+
+`uploadSize 0` = streaming (a push per meter report, ~8s).
+Inspect with `uploader_list` (check `LastSent` / `LastResponseCode`),
+remove with `uploader_delete` + `<provider>homepower</provider>`.
+Command names and parameters were recovered from the Rainforest cloud
+portal's JS bundle; they are not publicly documented.
+
 ## Notes
 
 - `KeepAlive` restarts the process if either the web server or the

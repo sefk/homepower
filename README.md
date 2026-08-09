@@ -7,8 +7,10 @@ See the [PRD][prd] for the full brief and the design invariants
 (gaps are unknown-not-zero, nothing interpolates, mixed resolution is
 permanent).
 
-Status: **Milestone 1** — foundation + Envoy (ADU solar). Coming per the
-[build order][prd]: SolarEdge cloud, bill seeding, Tesla, Eagle 3.
+Status: **Milestone 1** (foundation + Envoy ADU solar) plus the
+**Eagle 3 grid source** — whole-home import/export pushed by the meter
+every ~8s. Coming per the [build order][prd]: SolarEdge cloud, bill
+seeding, Tesla, then peak decomposition.
 
 ## Setup
 
@@ -45,6 +47,11 @@ Then http://localhost:8425/ — the catalog:
 
 - `/health/` — per-source coverage timeline, freshness, recent failures
 - `/solar/` — ADU production, day/week, gaps rendered as gaps
+- `/grid/` — whole-home demand (above zero = importing, below =
+  exporting), hourly import/export table
+
+The Eagle 3 pushes to `POST /ingest/eagle/`; see [ops/README.md][ops]
+for configuring its uploader.
 
 For boot-time operation under `launchd`, see [ops/README.md][ops].
 

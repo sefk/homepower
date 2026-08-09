@@ -95,9 +95,12 @@ fetch("{% url 'catalog:grid_data' %}?date={{ day|date:'Y-m-d' }}&range={{ range 
         gridcolor: grid,
         linecolor: baseline,
         // import/export polarity hinges on zero — make the line unmissable
+        // and never let autozoom crop it out (14 kW of EV charging must not
+        // render like a wiggle around a floating baseline)
         zeroline: true,
         zerolinecolor: ink2,
         zerolinewidth: 1,
+        rangemode: "tozero",
       },
       showlegend: plotTraces.length > 1,
       legend: { orientation: "h", y: 1.08 },

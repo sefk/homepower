@@ -87,6 +87,13 @@ class TestParser:
         assert readings[0].metric == "demand_w"
         assert readings[0].value == 1500.0
 
+    def test_no_reading_sentinel_becomes_absence_not_sample(self):
+        """0x800000 (sign-extended) means 'meter has no reading' — it must
+        vanish into unknown coverage, never become a -8.4 MW sample."""
+        for sentinel in (b"0xff800000", b"0x800000"):
+            payload = DEMAND_XML.replace(b"0x0005dc", sentinel)
+            assert parse_rfa(payload) == []
+
     def test_malformed_block_skipped_not_fatal(self):
         bad = DEMAND_XML.replace(b"0x0005dc", b"not-hex")
         assert parse_rfa(bad) == []
