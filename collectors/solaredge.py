@@ -75,12 +75,23 @@ class SolarEdgeCollector(Collector):
         for meter in payload.get("powerDetails", {}).get("meters", []):
             if meter.get("type") != "Production":
                 continue
+            prev_naive = None
+            fold = 0
             for point in meter.get("values", []):
                 if "value" not in point:
                     continue  # API omits value for not-yet-final quarters
-                ts = datetime.strptime(point["date"], "%Y-%m-%d %H:%M:%S").replace(
-                    tzinfo=tz
-                )
+                naive = datetime.strptime(point["date"], "%Y-%m-%d %H:%M:%S")
+                # DST fall-back: the API repeats 01:00-01:45 local. The
+                # response is chronological, so a timestamp <= its
+                # predecessor marks the second (standard-time) pass; from
+                # there on fold=1 keeps repeated wall times distinct
+                # instants instead of silently overwriting the first hour
+                # via the (series, ts) upsert. fold is ignored for
+                # unambiguous times, so leaving it set is harmless.
+                if prev_naive is not None and naive <= prev_naive:
+                    fold = 1
+                prev_naive = naive
+                ts = naive.replace(tzinfo=tz, fold=fold)
                 readings.append(
                     Reading(
                         metric="production_w",

@@ -140,24 +140,31 @@ def solar(request):
 
 
 def _traces(series_qs, start, end):
-    """Plotly traces. Gaps become nulls so lines break instead of bridging."""
+    """Plotly traces. Lines break wherever coverage says unknown.
+
+    Coverage is the single authority on gaps — no per-chart timestamp
+    thresholds to drift out of sync with each collector's grace rules.
+    (A confirmed_empty span with no samples would still draw across; no
+    source writes that state yet.)
+    """
     tz = timezone.get_current_timezone()
     traces = []
     for series in series_qs.select_related("source"):
         resolution = series.source.native_resolution_s
+        gaps = coverage.uncovered(series, start, end)
         xs, ys = [], []
         prev_ts = None
+        gi = 0
         samples = Sample.objects.filter(
             series=series, ts__gte=start, ts__lt=end
         ).order_by("ts")
         for s in samples.iterator():
-            # A missed interval puts consecutive samples exactly 2x the
-            # resolution apart — that boundary is already a hole, so break
-            # at >= rather than >. Jittered-but-adjacent samples sit well
-            # under it.
-            if prev_ts is not None and (s.ts - prev_ts).total_seconds() >= 2 * resolution:
-                xs.append(None)
-                ys.append(None)
+            if prev_ts is not None:
+                while gi < len(gaps) and gaps[gi][1] <= prev_ts:
+                    gi += 1
+                if gi < len(gaps) and gaps[gi][0] < s.ts and gaps[gi][1] > prev_ts:
+                    xs.append(None)  # unknown stretch: break the line
+                    ys.append(None)
             xs.append(s.ts.astimezone(tz).strftime("%Y-%m-%d %H:%M:%S"))
             ys.append(s.value)
             prev_ts = s.ts

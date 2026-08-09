@@ -197,3 +197,33 @@ class TestOmittedQuarterCoverage:
         spans = CoverageSpan.objects.order_by("start")
         assert spans.count() == 2  # the omitted quarter is a hole
         assert spans[0].end + timedelta(seconds=900) == spans[1].start
+
+
+class TestDstFallback:
+    def test_repeated_local_hour_yields_distinct_instants(self):
+        """Fall-back Sunday: 01:00-01:45 appears twice in local time. Both
+        passes must survive as distinct UTC instants — losing an hour of
+        production to the (series, ts) upsert is a silent annual bug."""
+        values = [
+            {"date": "2026-11-01 00:45:00", "value": 0.0},
+            {"date": "2026-11-01 01:00:00", "value": 1.0},  # PDT pass
+            {"date": "2026-11-01 01:15:00", "value": 2.0},
+            {"date": "2026-11-01 01:30:00", "value": 3.0},
+            {"date": "2026-11-01 01:45:00", "value": 4.0},
+            {"date": "2026-11-01 01:00:00", "value": 5.0},  # PST pass
+            {"date": "2026-11-01 01:15:00", "value": 6.0},
+            {"date": "2026-11-01 01:30:00", "value": 7.0},
+            {"date": "2026-11-01 01:45:00", "value": 8.0},
+            {"date": "2026-11-01 02:00:00", "value": 9.0},
+        ]
+        from datetime import timezone as dt_timezone
+
+        payload = {"powerDetails": {"meters": [{"type": "Production", "values": values}]}}
+        collector = SolarEdgeCollector(api_key="k", site_id="1")
+        readings = collector.parse_power_details(payload)
+        assert len(readings) == 10
+        utc_instants = {r.ts.astimezone(dt_timezone.utc).isoformat() for r in readings}
+        assert len(utc_instants) == 10  # no collisions, nothing overwritten
+        # and the sequence is strictly chronological in UTC
+        utcs = [r.ts.astimezone(dt_timezone.utc) for r in readings]
+        assert utcs == sorted(utcs)

@@ -155,3 +155,13 @@ class TestEndpoint:
         client.post("/ingest/eagle/", DEMAND_XML, content_type="text/xml")
         client.post("/ingest/eagle/", DEMAND_XML, content_type="text/xml")
         assert Sample.objects.count() == 1
+
+
+class TestPushCadenceGrace:
+    def test_thirty_second_push_pair_stays_one_span(self, transactional_db, client):
+        """30s between pushes is normal Eagle cadence, not a missed report —
+        coverage must not shred into slivers (grace is 4x nominal)."""
+        client.post("/ingest/eagle/", DEMAND_XML, content_type="text/xml")
+        late = DEMAND_XML.replace(b"0x2ff09e00", b"0x2ff09e1e")  # +30s
+        client.post("/ingest/eagle/", late, content_type="text/xml")
+        assert CoverageSpan.objects.filter(series__metric="demand_w").count() == 1

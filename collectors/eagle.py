@@ -122,6 +122,14 @@ class EagleCollector(Collector):
     # cumulative registers: the delta is exact across any gap
     always_bridge = frozenset({"energy_delivered_wh", "energy_received_wh"})
 
+    @property
+    def grace_s(self) -> int:
+        # Push cadence is variable (~8-30s observed/documented), so
+        # "exactly 2x nominal" doesn't mean a push was missed the way it
+        # does for a fixed-cadence poller. 4x nominal (60s) separates
+        # normal cadence from real silence.
+        return 4 * self.poll_interval_s
+
     def __init__(self):
         # nominal cadence drives staleness (3x) and coverage grace (2x)
         self.poll_interval_s = settings.EAGLE_NOMINAL_INTERVAL_S
