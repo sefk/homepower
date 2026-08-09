@@ -35,7 +35,7 @@ TESLA_CLIENT_SECRET=...
 TESLA_REFRESH_TOKEN=...            # from `manage.py tesla_auth`
 # optional overrides:
 # ENVOY_HOST=10.10.0.222
-# HOMEPOWER_PORT=8000
+# HOMEPOWER_PORT=8425
 # DJANGO_DEBUG=true
 ```
 
@@ -50,17 +50,24 @@ uv run python manage.py serve --no-collect   # UI only (development)
 uv run pytest                                # test suite
 ```
 
-Then http://localhost:8425/ — the catalog:
+Then http://localhost:8425/ — the analysis catalog index, every view
+listed with the question it answers. Highlights:
 
 - `/health/` — per-source coverage timeline, freshness, recent failures
-- `/solar/` — ADU production, day/week, gaps rendered as gaps
-- `/grid/` — whole-home demand (above zero = importing, below =
-  exporting), hourly import/export table
+- `/solar/`, `/grid/` — production and demand at native resolution,
+  gaps rendered as gaps
+- `/trueup/`, `/peak/`, `/costmap/` — where the cycle is heading, what
+  the 4–9pm window costs, which hours cost the money
+- `/baseline/`, `/selfuse/`, `/solarhealth/`, `/electrify/` — overnight
+  floor trend, self-consumption, per-kW array comparison, gas-to-heat-
+  pump modeling
 - `/ev/` — Tesla charge sessions: kWh, actual cost, and what shifting
   the session past 9pm would have cost instead
 
 The Eagle 3 pushes to `POST /ingest/eagle/`; see [ops/README.md][ops]
-for configuring its uploader.
+for configuring its uploader. Historical grid data imports from PG&E
+Green Button CSVs via `manage.py import_greenbutton` (backfilled
+coverage; see ops/README.md).
 
 For boot-time operation under `launchd`, see [ops/README.md][ops].
 

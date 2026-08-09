@@ -32,3 +32,18 @@ tracked issue — then collapse the theme to a pointer.
   boundary logic (4pm, 9pm, seasons) is the one place local wall time is
   genuinely the right domain. (core/coverage.py, collectors/solaredge.py;
   codex 019fe569)
+- 2026-08-09 — Third and fourth instances the same night: same-tzinfo
+  *comparison* takes the wall-clock shortcut too (fold-blind — bit the
+  Green Button end-time fix), and a fold latch that never releases
+  corrupts the NEXT fall-back a year later. **At promotion threshold**:
+  proposed rule for .claude/agents/dev.md pending owner go-ahead.
+  (core/management/commands/import_greenbutton.py)
+
+## Vendor SDK exceptions may not subclass Exception
+
+- 2026-08-09 — tesla-fleet-api's TeslaFleetError subclasses
+  BaseException; `except Exception` failure bookkeeping never sees it, so
+  a sleeping car would have crashed the scheduler task instead of
+  recording a failed run. Wrap vendor calls and re-raise as RuntimeError
+  at the collector boundary. Check the exception hierarchy of every new
+  vendor lib before trusting the base class's catch. (collectors/tesla.py)
