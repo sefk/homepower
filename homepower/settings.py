@@ -101,6 +101,11 @@ ENPHASE_USERNAME = os.environ.get("ENPHASE_USERNAME", "")
 ENPHASE_PASSWORD = os.environ.get("ENPHASE_PASSWORD", "")
 ENPHASE_TOKEN_FILE = VAR_DIR / "enphase_token.json"
 
+# SolarEdge cloud (main solar). Key from monitoring.solaredge.com; leave
+# blank to disable the collector.
+SOLAREDGE_API_KEY = os.environ.get("SOLAREDGE_API_KEY", "")
+SOLAREDGE_SITE_ID = os.environ.get("SOLAREDGE_SITE_ID", "")
+
 # Rainforest Eagle 3 (grid). It pushes to /ingest/eagle/; the creds are
 # only for configuring the device / its local API, never for ingest.
 EAGLE_HOST = os.environ.get("EAGLE_HOST", "10.10.0.216")

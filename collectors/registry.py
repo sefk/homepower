@@ -9,6 +9,7 @@ from django.conf import settings
 
 from .base import Collector
 from .envoy import EnvoyCollector
+from .solaredge import SolarEdgeCollector
 
 logger = logging.getLogger(__name__)
 
@@ -26,4 +27,13 @@ def enabled_collectors() -> list[Collector]:
         )
     else:
         logger.warning("envoy: no Enlighten credentials in .env, collector disabled")
+    if settings.SOLAREDGE_API_KEY and settings.SOLAREDGE_SITE_ID:
+        collectors.append(
+            SolarEdgeCollector(
+                api_key=settings.SOLAREDGE_API_KEY,
+                site_id=settings.SOLAREDGE_SITE_ID,
+            )
+        )
+    else:
+        logger.warning("solaredge: no API key in .env, collector disabled")
     return collectors

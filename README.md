@@ -9,8 +9,11 @@ permanent).
 
 Status: **Milestone 1** (foundation + Envoy ADU solar) plus the
 **Eagle 3 grid source** — whole-home import/export pushed by the meter
-every ~8s. Coming per the [build order][prd]: SolarEdge cloud, bill
-seeding, Tesla, then peak decomposition.
+every ~8s. The **SolarEdge cloud collector** (main array, 15-min) ships
+fixture-tested but key-gated — it stays disabled until
+`SOLAREDGE_API_KEY`/`SOLAREDGE_SITE_ID` are set, pending the owner's
+portal access. Coming per the [build order][prd]: bill seeding, Tesla,
+then peak decomposition.
 
 ## Setup
 
@@ -26,6 +29,8 @@ Secrets go in `.env` (gitignored, never committed):
 ```sh
 ENPHASE_USERNAME=you@example.com   # Enlighten cloud login; mints the local-API JWT
 ENPHASE_PASSWORD=...
+SOLAREDGE_API_KEY=...              # monitoring.solaredge.com -> Admin -> Site Access -> API Access
+SOLAREDGE_SITE_ID=...
 # optional overrides:
 # ENVOY_HOST=10.10.0.222
 # HOMEPOWER_PORT=8000

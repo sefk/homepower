@@ -3,6 +3,7 @@ name = "homepower"
 version = "0.1.0"
 requires-python = ">=3.14"
 dependencies = [
+    "aiohttp>=3.14.3",
     "django>=5.2,<6",
     "pyenphase>=3.2.0",
     "python-dotenv>=1.2.2",
