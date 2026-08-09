@@ -20,7 +20,7 @@ summary { cursor: pointer; color: var(--ink-2); font-size: 0.9rem; }
 {% endblock %}
 
 {% block content %}
-<h1>ADU solar production</h1>
+<h1>Solar production</h1>
 
 <div class="controls">
   <a href="?date={{ prev_day|date:'Y-m-d' }}&range={{ range }}">← prev</a>
@@ -42,12 +42,12 @@ summary { cursor: pointer; color: var(--ink-2); font-size: 0.9rem; }
   </p>
 </div>
 
-{% if hours %}
+{% for table in tables %}
 <details class="card">
-  <summary>Hourly energy table</summary>
+  <summary>Hourly energy — {{ table.source.name }}</summary>
   <table class="data" style="margin-top: 0.75rem">
     <tr><th>Hour</th><th>Energy (Wh)</th><th>Coverage</th></tr>
-    {% for h in hours %}
+    {% for h in table.hours %}
     <tr>
       <td>{{ h.hour|date:"H:i" }}</td>
       <td>{% if h.coverage_pct > 0 %}{{ h.wh|floatformat:0 }}{% else %}—{% endif %}</td>
@@ -56,7 +56,7 @@ summary { cursor: pointer; color: var(--ink-2); font-size: 0.9rem; }
     {% endfor %}
   </table>
 </details>
-{% endif %}
+{% endfor %}
 
 <script>
 const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;

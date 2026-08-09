@@ -100,24 +100,29 @@ def _window(request):
 
 
 def solar(request):
-    """ADU solar production; hourly table twin rides along."""
+    """Solar production, all arrays; hourly table twin per source."""
     day, span, days, start, end = _window(request)
 
-    hours = []
-    series = Series.objects.filter(
-        source__kind=Source.Kind.SOLAR, metric="production_w"
-    ).first()
-    if series and days == 1:
-        for h in range(24):
-            h_start = start + timedelta(hours=h)
-            result = energy_wh(series, h_start, h_start + timedelta(hours=1))
-            hours.append(
-                {
-                    "hour": h_start,
-                    "wh": result.wh,
-                    "coverage_pct": 100 * result.coverage,
-                }
-            )
+    # One hourly table per array — with two solar sources an unscoped
+    # .first() would nondeterministically label one array as the other.
+    tables = []
+    if days == 1:
+        production = Series.objects.filter(
+            source__kind=Source.Kind.SOLAR, metric="production_w"
+        ).select_related("source").order_by("source__slug")
+        for series in production:
+            hours = []
+            for h in range(24):
+                h_start = start + timedelta(hours=h)
+                result = energy_wh(series, h_start, h_start + timedelta(hours=1))
+                hours.append(
+                    {
+                        "hour": h_start,
+                        "wh": result.wh,
+                        "coverage_pct": 100 * result.coverage,
+                    }
+                )
+            tables.append({"source": series.source, "hours": hours})
 
     return render(
         request,
@@ -129,7 +134,7 @@ def solar(request):
             "prev_day": day - timedelta(days=days),
             "next_day": day + timedelta(days=days),
             "today": timezone.localdate(),
-            "hours": hours,
+            "tables": tables,
         },
     )
 

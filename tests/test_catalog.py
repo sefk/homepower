@@ -68,5 +68,19 @@ class TestSolarPage:
     def test_renders_with_hourly_table(self, solar_day, client):
         resp = client.get("/solar/?date=2026-08-01")
         assert resp.status_code == 200
-        assert b"Hourly energy table" in resp.content
+        assert b"Hourly energy" in resp.content
         assert b"unknown" in resp.content  # uncovered hours say so, not zero
+
+    def test_hourly_table_per_source(self, solar_day, client):
+        """Two arrays -> two labeled tables; nothing nondeterministic."""
+        from core.models import Series, Source
+
+        main = Source.objects.create(
+            slug="solaredge", name="Main solar (SolarEdge cloud)",
+            kind=Source.Kind.SOLAR, poll_interval_s=900, native_resolution_s=900,
+        )
+        Series.objects.create(source=main, metric="production_w", unit="W")
+        resp = client.get("/solar/?date=2026-08-01")
+        assert resp.content.count(b"Hourly energy \xe2\x80\x94") == 2
+        assert b"ADU solar (Enphase Envoy)" in resp.content
+        assert b"Main solar (SolarEdge cloud)" in resp.content
