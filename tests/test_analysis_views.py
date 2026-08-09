@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from django.core.management import call_command
 
+from billing.models import GasBillPeriod
 from core.coverage import record_coverage
 from core.models import CoverageSpan, Sample, Series, Source
 
@@ -146,6 +147,33 @@ class TestElectrifyData:
         assert data["shortfall_kw"] == pytest.approx(expected_annual_kwh / 1450)
 
 
+class TestElectrifyAnnualWindow:
+    def test_annual_total_uses_only_the_trailing_12_periods(self, db, client):
+        # 9 old periods, deliberately huge therms so a "sum everything"
+        # regression would be unmistakable in the assertion below.
+        for i in range(9):
+            GasBillPeriod.objects.create(
+                start_date=date(2024, 1, 1) + timedelta(days=31 * i),
+                end_date=date(2024, 1, 31) + timedelta(days=31 * i),
+                therms=1000.0,
+                charges=0.0,
+            )
+        # 12 recent periods -- these are the only ones "annual" should sum.
+        for i in range(12):
+            GasBillPeriod.objects.create(
+                start_date=date(2026, 1, 1) + timedelta(days=31 * i),
+                end_date=date(2026, 1, 31) + timedelta(days=31 * i),
+                therms=10.0,
+                charges=0.0,
+            )
+
+        data = client.get("/electrify/data.json").json()
+        assert data["annual_window"]["periods"] == 12
+        expected_annual_kwh = 12 * 10.0 * 29.3 / 3.0
+        assert data["annual_heat_pump_kwh"] == pytest.approx(expected_annual_kwh)
+        assert data["shortfall_kw"] == pytest.approx(expected_annual_kwh / 1450)
+
+
 class TestElectrifyPage:
     def test_renders(self, db, client):
         call_command("seed_bills")
@@ -213,6 +241,35 @@ class TestSelfuseData:
         data = client.get("/selfuse/data.json").json()
         idx = data["days"].index(day.isoformat())
         assert data["self_used_wh"][idx] is None
+
+
+    def test_export_exceeding_partially_covered_generation_is_unknown(
+        self, adu_series, grid_series, client, monkeypatch
+    ):
+        # Both sides clear the 0.9 coverage floor, but the covered
+        # generation hours happen to be low-output ones -- actual measured
+        # generation is tiny, while a fully-covered grid shows a real
+        # export bigger than what was observed. Physically that can only
+        # mean generation samples are missing, so this must render as a
+        # gap, not a clamped-to-zero self-used with an impossible export
+        # bar taller than generation.
+        monkeypatch.setattr("catalog.views.timezone.localdate", lambda: date(2026, 8, 5))
+        day = date(2026, 8, 4)
+        day_start = la(2026, 8, 4, 0, 0)
+        day_end = day_start + timedelta(days=1)
+
+        Sample.objects.create(series=adu_series, ts=day_start, duration_s=3600, value=100.0)
+        record_coverage(
+            adu_series, day_start, day_start + timedelta(hours=22), CoverageSpan.State.LIVE
+        )  # 22/24h = 91.7% coverage, above the floor, but only 100 Wh observed
+        Sample.objects.create(series=grid_series, ts=day_start, duration_s=3600, value=-1000.0)
+        record_coverage(grid_series, day_start, day_end, CoverageSpan.State.LIVE)  # 1000 Wh exported
+
+        data = client.get("/selfuse/data.json").json()
+        idx = data["days"].index(day.isoformat())
+        assert data["self_used_wh"][idx] is None
+        assert data["exported_wh"][idx] is None
+        assert data["fraction"][idx] is None
 
 
 class TestSelfusePage:

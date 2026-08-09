@@ -59,7 +59,7 @@ const netColor = dark ? "#3987e5" : "#2a78d6";
 
 fetch("{% url 'catalog:electrify_data' %}?cop={{ cop }}")
   .then((r) => r.json())
-  .then(({ labels, heat_pump_kwh, net_kwh, cop, annual_heat_pump_kwh, shortfall_kw }) => {
+  .then(({ labels, heat_pump_kwh, net_kwh, cop, annual_heat_pump_kwh, shortfall_kw, annual_window }) => {
     const layout = {
       barmode: "group",
       margin: { l: 55, r: 15, t: 10, b: 60 },
@@ -95,9 +95,12 @@ fetch("{% url 'catalog:electrify_data' %}?cop={{ cop }}")
       { displayModeBar: false, responsive: true },
     );
 
+    const window = annual_window.periods
+      ? ` (the trailing ${annual_window.periods} bills, ${annual_window.start} – ${annual_window.end})`
+      : "";
     document.getElementById("shortfall").innerHTML =
       `At COP ${cop.toFixed(1)}, modeled annual heat-pump load is ` +
-      `<strong>${annual_heat_pump_kwh.toFixed(0)} kWh</strong>. At an assumed ` +
+      `<strong>${annual_heat_pump_kwh.toFixed(0)} kWh</strong>${window}. At an assumed ` +
       `<strong>1,450 kWh/kW-year</strong> (NREL-ish figure for this latitude), the array ` +
       `would need about <strong>${shortfall_kw.toFixed(2)} kW</strong> more panels to carry it.`;
   });

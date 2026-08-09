@@ -51,6 +51,9 @@ ELECTRIFY_COP_MAX = 5.0
 # PVWatts-ish figure for the Bay Area) -- used only for the /electrify/
 # array-shortfall estimate, not for any per-instant modeling.
 ARRAY_KWH_PER_KW_YEAR = 1450
+# Trailing bill periods that make up the "annual" heat-pump total -- the
+# most recent 12 GasBillPeriod rows by end_date, one per month.
+ANNUAL_GAS_PERIODS = 12
 
 # Analysis catalog for the index page (PRD: the catalog is the product).
 # Each entry states the one-sentence question it answers, not a chart type.
@@ -624,20 +627,28 @@ def electrify_data(request):
     bills_by_month = {
         (p.end_date.year, p.end_date.month): p for p in BillPeriod.objects.all()
     }
+    gas_periods = list(GasBillPeriod.objects.order_by("end_date"))
+    # "Annual" heat-pump load is the trailing ANNUAL_GAS_PERIODS bill
+    # periods by end_date, not the whole table -- summing every seeded gas
+    # bill ever would inflate the "annual" figure (and the shortfall stat
+    # derived from it) as more years of history accumulate.
+    annual_ids = {g.id for g in gas_periods[-ANNUAL_GAS_PERIODS:]}
 
     labels, therms, heat_pump_kwh, net_kwh = [], [], [], []
     annual_kwh = 0.0
-    for g in GasBillPeriod.objects.order_by("end_date"):
+    for g in gas_periods:
         kwh = g.therms * THERM_TO_KWH_THERMAL / cop
         labels.append(g.end_date.isoformat())
         therms.append(g.therms)
         heat_pump_kwh.append(kwh)
-        annual_kwh += kwh
+        if g.id in annual_ids:
+            annual_kwh += kwh
         # Gas and electric bill cycles don't share boundaries; matched by
         # end-month as an approximation (template footer notes this).
         match = bills_by_month.get((g.end_date.year, g.end_date.month))
         net_kwh.append(match.net_kwh if match else None)
 
+    annual_periods = gas_periods[-ANNUAL_GAS_PERIODS:]
     return JsonResponse(
         {
             "labels": labels,
@@ -647,6 +658,11 @@ def electrify_data(request):
             "cop": cop,
             "annual_heat_pump_kwh": annual_kwh,
             "shortfall_kw": annual_kwh / ARRAY_KWH_PER_KW_YEAR,
+            "annual_window": {
+                "start": annual_periods[0].end_date.isoformat() if annual_periods else None,
+                "end": annual_periods[-1].end_date.isoformat() if annual_periods else None,
+                "periods": len(annual_periods),
+            },
         }
     )
 
@@ -677,6 +693,15 @@ def _selfuse_day(day, tz, solar_series, grid_series):
         grid_coverage = split.coverage
 
     if gen_coverage < SELFUSE_MIN_COVERAGE or grid_coverage < SELFUSE_MIN_COVERAGE:
+        return None
+
+    if exported_wh > generation_wh:
+        # Both sides cleared the coverage floor but are still partial, and
+        # measured exports exceed measured generation -- physically that
+        # can only mean generation samples are missing, not that the
+        # house exported more than it made. That's indistinguishable from
+        # "not enough generation coverage," so it's a gap, not a clamped
+        # self-used of 0 (which would silently render unknown as zero).
         return None
 
     self_used_wh = max(generation_wh - exported_wh, 0.0)
