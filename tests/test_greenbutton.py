@@ -43,6 +43,17 @@ Electric usage,11/02/2025,01:00,01:15,0.100,kWh,$0.06
 Electric usage,11/02/2025,01:00,01:15,0.100,kWh,$0.06
 """
 
+# A file spanning TWO fall-back transitions (2025-11-02 and 2026-11-01).
+# The fold latch must release after the first repeated hour, or the
+# second transition's first (daylight) pass reads as standard time and
+# collides with the real second pass on (series, ts).
+DST_TWO_FALLBACKS_CSV = """TYPE,DATE,START TIME,END TIME,USAGE,UNITS,COST
+Electric usage,11/02/2025,01:00,01:15,0.100,kWh,$0.06
+Electric usage,11/02/2025,01:00,01:15,0.200,kWh,$0.12
+Electric usage,11/01/2026,01:00,01:15,0.300,kWh,$0.18
+Electric usage,11/01/2026,01:00,01:15,0.400,kWh,$0.24
+"""
+
 GARBAGE_CSV = """this is not a Green Button export
 just some random text
 with no header row at all
@@ -228,6 +239,19 @@ class TestDstFallback:
         # 01:00 PDT (fold=0) = 08:00 UTC, 01:00 PST (fold=1) = 09:00 UTC
         assert samples[0].ts == utc(2025, 11, 2, 8, 0)
         assert samples[1].ts == utc(2025, 11, 2, 9, 0)
+
+    def test_second_fallback_a_year_later_keeps_all_four_samples(self, tmp_path):
+        """The fold latch resets once the ambiguous hour ends; a year-plus
+        export spanning two fall-backs keeps all four repeated-hour rows
+        as distinct instants instead of colliding the second pair."""
+        path = _write(tmp_path, "dst_two.csv", DST_TWO_FALLBACKS_CSV)
+        call_command("import_greenbutton", path)
+
+        samples = list(Sample.objects.filter(series__metric="grid_import_wh").order_by("ts"))
+        assert [s.value for s in samples] == [100.0, 200.0, 300.0, 400.0]
+        # each transition's pair is PDT then PST, one real hour apart
+        assert samples[1].ts - samples[0].ts == timedelta(hours=1)
+        assert samples[3].ts - samples[2].ts == timedelta(hours=1)
 
     def test_interval_straddling_the_transition_is_15_minutes_not_a_day(self, tmp_path):
         """START 01:45 (PDT) -> END "01:00" (PST) is a real 15-minute

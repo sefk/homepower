@@ -182,8 +182,22 @@ class Command(BaseCommand):
             # time that doesn't advance past its predecessor marks the
             # second (standard-time) pass through the ambiguous hour.
             # Same approach as collectors/solaredge.py parse_power_details.
+            # fold=1 only while (a) this wall time is genuinely ambiguous
+            # (the two folds resolve to different offsets) and (b) a
+            # non-advancing timestamp told us we're in the second pass.
+            # (a) alone isn't enough — the first pass through the repeated
+            # hour is ambiguous too; (b) alone would latch fold past the
+            # ambiguous hour, so a year-plus export spanning TWO fall-backs
+            # would misread the next one's first pass and collide rows on
+            # (series, ts).
+            ambiguous = (
+                start_naive.replace(tzinfo=tz, fold=0).utcoffset()
+                != start_naive.replace(tzinfo=tz, fold=1).utcoffset()
+            )
             if prev_naive is not None and start_naive <= prev_naive:
                 fold = 1
+            if not ambiguous:
+                fold = 0
             prev_naive = start_naive
             ts = start_naive.replace(tzinfo=tz, fold=fold)
             sequence.append(ts)
