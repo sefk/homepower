@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Cost heatmap{% endblock %}
+
+{% block head %}
+<script src="/static/vendor/plotly.min.js"></script>
+<style>
+#chart { width: 100%; height: 520px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Cost heatmap</h1>
+
+<div class="card">
+  <div id="chart"></div>
+  <p class="small muted" style="margin-bottom:0">
+    Blank cells are hours with no data — unknown, not zero.
+    Rates are bill-derived approximations, not the PG&E/PCE tariff.
+  </p>
+</div>
+
+<script>
+const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+const ink2 = dark ? "#c3c2b7" : "#52514e";
+const grid = dark ? "#2c2c2a" : "#e1e0d9";
+const baseline = dark ? "#383835" : "#c3c2b7";
+// Sequential single hue, magnitude only. In light mode: cheap hours fade
+// pale into the page, expensive hours go dark. In dark mode the same
+// relationship inverted so cheap hours still recede into the surface and
+// expensive hours still pop — not a straight color flip.
+const colorscale = dark
+  ? [[0, "#173257"], [1, "#8fc1fb"]]
+  : [[0, "#cde2fb"], [1, "#0d366b"]];
+
+fetch("{% url 'catalog:costmap_data' %}")
+  .then((r) => r.json())
+  .then(({ days, hours, z }) => {
+    const trace = {
+      x: days,
+      y: hours,
+      z: z,
+      type: "heatmap",
+      colorscale: colorscale,
+      hoverongaps: false,
+      colorbar: { title: { text: "$" }, tickprefix: "$", outlinewidth: 0 },
+      hovertemplate: "%{x} %{y}:00 · $%{z:.2f}<extra></extra>",
+    };
+    const layout = {
+      margin: { l: 50, r: 15, t: 10, b: 60 },
+      paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: "system-ui, sans-serif", size: 12, color: ink2 },
+      xaxis: { gridcolor: grid, linecolor: baseline, type: "category" },
+      yaxis: {
+        title: { text: "hour" },
+        gridcolor: grid,
+        linecolor: baseline,
+        autorange: "reversed",
+        dtick: 2,
+      },
+    };
+    Plotly.newPlot("chart", [trace], layout, { displayModeBar: false, responsive: true });
+  });
+</script>
+{% endblock %}

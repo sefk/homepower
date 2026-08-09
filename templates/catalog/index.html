@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Catalog{% endblock %}
+
+{% block head %}
+<style>
+.group { margin-bottom: 1.75rem; }
+.group h2 { margin-bottom: 0.75rem; }
+.entry {
+  display: block;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--grid);
+  text-decoration: none;
+  color: inherit;
+}
+.entry:last-child { border-bottom: none; }
+.entry .title { font-weight: 600; color: var(--ink); }
+a.entry:hover .title { color: var(--series-1); }
+.entry .question { color: var(--ink-2); font-size: 0.9rem; margin-top: 0.15rem; }
+.waiting .entry .title { color: var(--muted); font-weight: 600; }
+.waiting .entry .question { color: var(--muted); }
+.waiting .entry .why { color: var(--muted); font-size: 0.8rem; font-style: italic; margin-top: 0.15rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Analysis catalog</h1>
+
+{% for group in groups %}
+<section class="group">
+  <h2>{{ group.name }}</h2>
+  <div class="card" style="padding: 0.25rem 1.25rem">
+    {% for entry in group.entries %}
+    <a class="entry" href="{% url entry.url_name %}">
+      <div class="title">{{ entry.title }}</div>
+      <div class="question">{{ entry.question }}</div>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endfor %}
+
+<section class="group waiting">
+  <h2>{{ waiting.name }}</h2>
+  <div class="card" style="padding: 0.25rem 1.25rem">
+    {% for entry in waiting.entries %}
+    <div class="entry">
+      <div class="title">{{ entry.title }}</div>
+      <div class="question">{{ entry.question }}</div>
+      <div class="why">{{ entry.why }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

@@ -40,8 +40,12 @@ class TestHealth:
         assert b"production_w" in resp.content
         assert b"stale" in resp.content  # last sample is from 2026-08-01
 
-    def test_index_redirects_to_health(self, db, client):
-        assert client.get("/").url == "/health/"
+    def test_index_no_longer_redirects(self, db, client):
+        # / is the catalog index now (see tests/test_cost_views.py); this
+        # just guards against the old redirect-to-health behavior coming back.
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert not hasattr(resp, "url")
 
 
 class TestSolarData:

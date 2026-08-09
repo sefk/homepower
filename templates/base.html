@@ -54,7 +54,7 @@ header {
   padding: 0.9rem 1.5rem;
   border-bottom: 1px solid var(--grid);
 }
-header .brand { font-weight: 650; }
+header .brand { font-weight: 650; color: var(--ink); text-decoration: none; }
 header nav { display: flex; gap: 1rem; }
 header nav a {
   color: var(--ink-2);
@@ -92,7 +92,7 @@ table.data td:first-child, table.data th:first-child { text-align: left; }
 </head>
 <body>
 <header>
-  <span class="brand">635 Central</span>
+  <a class="brand" href="{% url 'catalog:index' %}">635 Central</a>
   <nav>
     <a href="{% url 'catalog:health' %}" class="{% if section == 'health' %}active{% endif %}">Data health</a>
     <a href="{% url 'catalog:solar' %}" class="{% if section == 'solar' %}active{% endif %}">Solar</a>

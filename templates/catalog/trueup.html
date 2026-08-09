@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}True-up tracker{% endblock %}
+
+{% block head %}
+<script src="/static/vendor/plotly.min.js"></script>
+<style>
+#chart-kwh, #chart-dollars { width: 100%; height: 320px; }
+.outcome {
+  font-size: 0.95rem;
+  margin: 0 0 1.25rem;
+}
+.outcome strong { font-variant-numeric: tabular-nums; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>True-up tracker</h1>
+
+<p id="outcome" class="outcome muted"></p>
+
+<div class="card">
+  <h2 style="margin-bottom: 0.5rem">Cumulative net kWh</h2>
+  <div id="chart-kwh"></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-bottom: 0.5rem">Cumulative NEM charges ($)</h2>
+  <div id="chart-dollars"></div>
+  <p class="small muted" style="margin-bottom:0">
+    Months into cycle, so the current cycle overlays last year's at the same point.
+    From billed history only — no live-grid projection.
+  </p>
+</div>
+
+<script>
+const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+const ink2 = dark ? "#c3c2b7" : "#52514e";
+const grid = dark ? "#2c2c2a" : "#e1e0d9";
+const baseline = dark ? "#383835" : "#c3c2b7";
+const priorColor = dark ? "#3987e5" : "#2a78d6";
+const currentColor = dark ? "#d95926" : "#eb6834";
+
+fetch("{% url 'catalog:trueup_data' %}")
+  .then((r) => r.json())
+  .then(({ cycles, outcome }) => {
+    if (outcome) {
+      document.getElementById("outcome").innerHTML =
+        `The ${outcome.label} cycle closed at <strong>${outcome.net_kwh.toFixed(0)} kWh</strong> / ` +
+        `<strong>$${outcome.nem_charges.toFixed(2)}</strong>.`;
+    }
+
+    const baseLayout = (yTitle) => ({
+      margin: { l: 60, r: 15, t: 10, b: 40 },
+      paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: "system-ui, sans-serif", size: 12, color: ink2 },
+      xaxis: { title: { text: "months into cycle" }, gridcolor: grid, linecolor: baseline, zeroline: false, dtick: 1 },
+      yaxis: { title: { text: yTitle }, gridcolor: grid, linecolor: baseline, zeroline: true, zerolinecolor: ink2, zerolinewidth: 1 },
+      showlegend: true,
+      legend: { orientation: "h", y: 1.12 },
+      hovermode: "x unified",
+    });
+
+    const trace = (c, key) => ({
+      x: c.months,
+      y: c[key],
+      name: c.label + (c.complete ? "" : " (current)"),
+      type: "scatter",
+      mode: "lines+markers",
+      line: { width: 2, color: c.complete ? priorColor : currentColor, dash: c.complete ? "solid" : "solid" },
+      marker: { size: 5 },
+    });
+
+    Plotly.newPlot(
+      "chart-kwh",
+      cycles.map((c) => trace(c, "net_kwh")),
+      baseLayout("kWh"),
+      { displayModeBar: false, responsive: true },
+    );
+    Plotly.newPlot(
+      "chart-dollars",
+      cycles.map((c) => trace(c, "nem_charges")),
+      baseLayout("$"),
+      { displayModeBar: false, responsive: true },
+    );
+  });
+</script>
+{% endblock %}

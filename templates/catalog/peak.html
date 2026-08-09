@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Peak-window bill share{% endblock %}
+
+{% block head %}
+<script src="/static/vendor/plotly.min.js"></script>
+<style>
+#chart { width: 100%; height: 420px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Peak-window bill share</h1>
+
+<div class="card">
+  <div id="chart"></div>
+  <p class="small muted" style="margin-bottom:0">
+    Per billed period, kWh in the 4–9pm window against the other 19 hours.
+    Negative bars are net export (NEM credit), not usage.
+  </p>
+</div>
+
+{% if rows %}
+<div class="card">
+  <h2 style="margin-bottom: 0.5rem">Last {{ rows|length }} days — live Eagle data</h2>
+  <table class="data" style="margin-top: 0.75rem">
+    <tr><th>Day</th><th>Peak (4–9pm) Wh</th><th>Coverage</th><th>Off-peak Wh</th><th>Coverage</th></tr>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.day|date:"D M j" }}</td>
+      <td>{% if r.peak_coverage_pct > 0 %}{{ r.peak_wh|floatformat:0 }}{% else %}—{% endif %}</td>
+      <td>{% if r.peak_coverage_pct < 99.9 and r.peak_coverage_pct > 0 %}{{ r.peak_coverage_pct|floatformat:0 }}%{% elif r.peak_coverage_pct == 0 %}unknown{% else %}100%{% endif %}</td>
+      <td>{% if r.offpeak_coverage_pct > 0 %}{{ r.offpeak_wh|floatformat:0 }}{% else %}—{% endif %}</td>
+      <td>{% if r.offpeak_coverage_pct < 99.9 and r.offpeak_coverage_pct > 0 %}{{ r.offpeak_coverage_pct|floatformat:0 }}%{% elif r.offpeak_coverage_pct == 0 %}unknown{% else %}100%{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% else %}
+<p class="muted small">No live grid data yet — the Eagle 3 hasn't reported.</p>
+{% endif %}
+
+<script>
+const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+const ink2 = dark ? "#c3c2b7" : "#52514e";
+const grid = dark ? "#2c2c2a" : "#e1e0d9";
+const baseline = dark ? "#383835" : "#c3c2b7";
+const peakColor = dark ? "#d95926" : "#eb6834";
+const offpeakColor = dark ? "#3987e5" : "#2a78d6";
+
+fetch("{% url 'catalog:peak_data' %}")
+  .then((r) => r.json())
+  .then(({ labels, peak_kwh, offpeak_kwh }) => {
+    const traces = [
+      { x: labels, y: peak_kwh, name: "peak (4–9pm)", type: "bar", marker: { color: peakColor } },
+      { x: labels, y: offpeak_kwh, name: "off-peak", type: "bar", marker: { color: offpeakColor } },
+    ];
+    const layout = {
+      barmode: "group",
+      margin: { l: 55, r: 15, t: 10, b: 60 },
+      paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: "system-ui, sans-serif", size: 12, color: ink2 },
+      xaxis: { gridcolor: grid, linecolor: baseline, zeroline: false, type: "category" },
+      yaxis: {
+        title: { text: "kWh" },
+        gridcolor: grid,
+        linecolor: baseline,
+        zeroline: true,
+        zerolinecolor: ink2,
+        zerolinewidth: 1,
+      },
+      showlegend: true,
+      legend: { orientation: "h", y: 1.08 },
+      hovermode: "x unified",
+    };
+    Plotly.newPlot("chart", traces, layout, { displayModeBar: false, responsive: true });
+  });
+</script>
+{% endblock %}
