@@ -9,11 +9,10 @@ permanent).
 
 Status: **Milestone 1** (foundation + Envoy ADU solar) plus the
 **Eagle 3 grid source** — whole-home import/export pushed by the meter
-every ~8s. The **SolarEdge cloud collector** (main array, 15-min) ships
-fixture-tested but key-gated — it stays disabled until
-`SOLAREDGE_API_KEY`/`SOLAREDGE_SITE_ID` are set, pending the owner's
-portal access. Coming per the [build order][prd]: bill seeding, Tesla,
-then peak decomposition.
+every ~8s. The **SolarEdge cloud collector** (main array, 15-min) and
+the **Tesla Fleet API collector** (EV charging) ship fixture-tested but
+key-gated — each stays disabled until its `.env` credentials are set.
+Coming per the [build order][prd]: peak decomposition.
 
 ## Setup
 
@@ -31,6 +30,9 @@ ENPHASE_USERNAME=you@example.com   # Enlighten cloud login; mints the local-API 
 ENPHASE_PASSWORD=...
 SOLAREDGE_API_KEY=...              # monitoring.solaredge.com -> Admin -> Site Access -> API Access
 SOLAREDGE_SITE_ID=...
+TESLA_CLIENT_ID=...                # see ops/tesla-setup.md
+TESLA_CLIENT_SECRET=...
+TESLA_REFRESH_TOKEN=...            # from `manage.py tesla_auth`
 # optional overrides:
 # ENVOY_HOST=10.10.0.222
 # HOMEPOWER_PORT=8000
@@ -54,6 +56,8 @@ Then http://localhost:8425/ — the catalog:
 - `/solar/` — ADU production, day/week, gaps rendered as gaps
 - `/grid/` — whole-home demand (above zero = importing, below =
   exporting), hourly import/export table
+- `/ev/` — Tesla charge sessions: kWh, actual cost, and what shifting
+  the session past 9pm would have cost instead
 
 The Eagle 3 pushes to `POST /ingest/eagle/`; see [ops/README.md][ops]
 for configuring its uploader.
@@ -83,6 +87,9 @@ For boot-time operation under `launchd`, see [ops/README.md][ops].
 - **Envoy token churn is normal.** Firmware D7+ requires an
   Enlighten-minted JWT for the local API; it's cached in `var/` and
   re-minted automatically when rejected.
+- **Tesla refresh tokens rotate on every use.** Like the Envoy JWT, the
+  current one is cached in `var/tesla_token.json` and updated after
+  every poll, so a restart doesn't need `manage.py tesla_auth` re-run.
 
 [prd]: docs/prd/homepower/prd.md
 [ops]: ops/README.md

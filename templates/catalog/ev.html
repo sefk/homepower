@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}EV charge sessions{% endblock %}
+
+{% block head %}
+<style>
+.stat { font-size: 0.95rem; margin: 0 0 1.25rem; }
+.stat strong { font-variant-numeric: tabular-nums; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>EV charge sessions</h1>
+
+{% if sessions %}
+<p class="stat">
+  Trailing {{ sessions|length }} session{{ sessions|pluralize }}: shifting every one of them past 9pm
+  would have saved <strong>${{ total_savings|floatformat:2 }}</strong> at bill-derived rates.
+</p>
+
+<div class="card">
+  <table class="data">
+    <tr>
+      <th>Start (local)</th>
+      <th>Duration</th>
+      <th>kWh</th>
+      <th>Actual $</th>
+      <th>Shifted $</th>
+      <th>Saved $</th>
+    </tr>
+    {% for s in sessions %}
+    <tr>
+      <td>{{ s.start|date:"D M j g:iA" }}</td>
+      <td>{{ s.duration_label }}</td>
+      <td>{{ s.kwh|floatformat:1 }}</td>
+      <td>${{ s.actual_cost|floatformat:2 }}</td>
+      <td>${{ s.shifted_cost|floatformat:2 }}</td>
+      <td>${{ s.saved|floatformat:2 }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="small muted" style="margin-bottom:0; margin-top: 0.75rem">
+    A session is a contiguous run of charging power &gt; 0 (collectors/tesla.py); it breaks on an
+    explicit "not charging" reading or a coverage gap, never on raw elapsed time. Actual $ prices
+    each sample at the TOU rate in effect when it happened; shifted $ re-prices the same energy at
+    that date's off-peak rate — what charging entirely after 9pm would have cost.
+  </p>
+</div>
+{% elif has_source %}
+<div class="card">
+  <p class="muted" style="margin-bottom:0">
+    No charge sessions in the trailing {{ lookback_days }} days yet.
+  </p>
+</div>
+{% else %}
+<div class="card">
+  <p class="muted" style="margin-bottom:0">
+    No Tesla data yet — see ops/tesla-setup.md.
+  </p>
+</div>
+{% endif %}
+{% endblock %}

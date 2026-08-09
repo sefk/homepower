@@ -107,6 +107,27 @@ ENPHASE_TOKEN_FILE = VAR_DIR / "enphase_token.json"
 SOLAREDGE_API_KEY = os.environ.get("SOLAREDGE_API_KEY", "")
 SOLAREDGE_SITE_ID = os.environ.get("SOLAREDGE_SITE_ID", "")
 
+# Tesla Fleet API (EV, Model S). Refresh token minted by `manage.py
+# tesla_auth`; see ops/tesla-setup.md for the developer-app registration
+# and public-key hosting steps. Leave TESLA_CLIENT_ID/TESLA_REFRESH_TOKEN
+# blank to disable the collector. TESLA_VIN is optional -- when blank the
+# collector reads the account's first vehicle (PRD assumption: the free
+# tier covers one car).
+TESLA_CLIENT_ID = os.environ.get("TESLA_CLIENT_ID", "")
+TESLA_CLIENT_SECRET = os.environ.get("TESLA_CLIENT_SECRET", "")
+TESLA_REFRESH_TOKEN = os.environ.get("TESLA_REFRESH_TOKEN", "")
+TESLA_VIN = os.environ.get("TESLA_VIN", "")
+TESLA_REGION = os.environ.get("TESLA_REGION", "na")
+TESLA_TOKEN_FILE = VAR_DIR / "tesla_token.json"
+
+# Home coordinates, for the Tesla collector's best-effort home-charging
+# geofence (PRD wants home charging cost, not Supercharger stops).
+# Blank disables the geofence -- every charging reading counts as home.
+_home_lat = os.environ.get("HOME_LAT")
+_home_lon = os.environ.get("HOME_LON")
+HOME_LAT = float(_home_lat) if _home_lat else None
+HOME_LON = float(_home_lon) if _home_lon else None
+
 # Rainforest Eagle 3 (grid). It pushes to /ingest/eagle/; the creds are
 # only for configuring the device / its local API, never for ingest.
 EAGLE_HOST = os.environ.get("EAGLE_HOST", "10.10.0.216")

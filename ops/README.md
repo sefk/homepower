@@ -79,6 +79,12 @@ remove with `uploader_delete` + `<provider>homepower</provider>`.
 Command names and parameters were recovered from the Rainforest cloud
 portal's JS bundle; they are not publicly documented.
 
+## Tesla Fleet API (EV source)
+
+See [tesla-setup.md](tesla-setup.md) — developer-app registration,
+public-key hosting, partner-account registration, and the
+`manage.py tesla_auth` refresh-token bootstrap.
+
 ## Green Button backfill (grid history before/beyond the Eagle 3)
 
 PG&E's own meter history, for filling gaps the Eagle 3 didn't cover or

@@ -10,6 +10,7 @@ from django.conf import settings
 from .base import Collector
 from .envoy import EnvoyCollector
 from .solaredge import SolarEdgeCollector
+from .tesla import TeslaCollector
 
 logger = logging.getLogger(__name__)
 
@@ -36,4 +37,19 @@ def enabled_collectors() -> list[Collector]:
         )
     else:
         logger.warning("solaredge: no API key in .env, collector disabled")
+    if settings.TESLA_CLIENT_ID and settings.TESLA_REFRESH_TOKEN:
+        collectors.append(
+            TeslaCollector(
+                client_id=settings.TESLA_CLIENT_ID,
+                client_secret=settings.TESLA_CLIENT_SECRET,
+                refresh_token=settings.TESLA_REFRESH_TOKEN,
+                token_file=settings.TESLA_TOKEN_FILE,
+                vin=settings.TESLA_VIN or None,
+                region=settings.TESLA_REGION,
+                home_lat=settings.HOME_LAT,
+                home_lon=settings.HOME_LON,
+            )
+        )
+    else:
+        logger.warning("tesla: no client id/refresh token in .env, collector disabled")
     return collectors

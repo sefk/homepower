@@ -25,4 +25,5 @@ urlpatterns = [
     path("selfuse/data.json", views.selfuse_data, name="selfuse_data"),
     path("solarhealth/", views.solarhealth, name="solarhealth"),
     path("solarhealth/data.json", views.solarhealth_data, name="solarhealth_data"),
+    path("ev/", views.ev, name="ev"),
 ]

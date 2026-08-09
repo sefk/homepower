@@ -53,8 +53,11 @@ class TestIndex:
         assert "Where is this true-up cycle heading" in content
         # not-yet-built views are present but dimmed, with a reason
         assert "Peak decomposition" in content
-        assert "EV charge sessions" in content
-        assert "needs the Tesla Fleet API collector" in content
+        assert "needs multiple years of production history" in content
+        # the Tesla collector is live now: EV charge sessions moved off
+        # the waiting list and links out like any other built analysis
+        assert 'href="/ev/"' in content
+        assert "needs the Tesla Fleet API collector" not in content
         # the Eagle 3 is live now; stale hardware-gated reasons are gone
         assert "needs the Eagle 3" not in content
 

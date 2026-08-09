@@ -17,6 +17,7 @@ from django.utils import timezone
 from billing.cycles import cycle_label, true_up_cycles
 from billing.models import BillPeriod, GasBillPeriod
 from billing.rates import PEAK_END_HOUR, PEAK_START_HOUR, rate_for, rates_for
+from catalog.ev import sessions as ev_sessions
 from core import coverage
 from core.aggregate import energy_wh, grid_hourly_wh, has_grid_data
 from core.models import CollectorRun, Sample, Series, Source
@@ -40,6 +41,7 @@ SELFUSE_DAYS = 30  # /selfuse/ trailing window
 # Both generation and grid coverage must clear this for a day to render.
 SELFUSE_MIN_COVERAGE = 0.9
 SOLARHEALTH_DAYS = 7  # /solarhealth/ trailing window
+EV_LOOKBACK_DAYS = 180  # /ev/ trailing window for charge-session derivation
 
 # kWh of thermal energy per therm (EIA constant); heat-pump electric kWh =
 # therms * THERM_TO_KWH_THERMAL / COP.
@@ -124,6 +126,16 @@ CATALOG_GROUPS = [
         ],
     },
     {
+        "name": "EV",
+        "entries": [
+            {
+                "title": "EV charge sessions",
+                "url_name": "catalog:ev",
+                "question": "What did each charge session cost, and what would shifting past 9pm have saved?",
+            },
+        ],
+    },
+    {
         "name": "Data health",
         "entries": [
             {
@@ -160,16 +172,6 @@ WAITING_GROUP = {
             "title": "Degradation trend",
             "question": "Is the 2015 SunPower array's annual peak output declining?",
             "why": "needs multiple years of production history",
-        },
-        {
-            "title": "EV charge sessions",
-            "question": "What did each charge session cost at the TOU rate in effect?",
-            "why": "needs the Tesla Fleet API collector, not yet built",
-        },
-        {
-            "title": "EV counterfactual",
-            "question": "What would those sessions have cost shifted past 9pm?",
-            "why": "needs the Tesla Fleet API collector, not yet built",
         },
     ],
 }
@@ -815,3 +817,43 @@ def solarhealth_data(request):
             t["name"] = f"{series.source.name} — W/kW"
 
     return JsonResponse({"traces": traces})
+
+
+def ev(request):
+    """What did each charge session cost, and what would shifting past
+    9pm have saved? The table is the view -- no chart for v1 (a session
+    list of a dozen rows says more as numbers than as a sparse bar chart)."""
+    series = Series.objects.filter(
+        source__kind=Source.Kind.EV, metric="ev_charge_power_w"
+    ).first()
+
+    rows = []
+    if series:
+        end = timezone.now()
+        start = end - timedelta(days=EV_LOOKBACK_DAYS)
+        for s in ev_sessions(series, start, end):
+            total_min = round(s.duration_s / 60)
+            hours, mins = divmod(total_min, 60)
+            duration_label = f"{hours}h {mins}m" if hours else f"{mins}m"
+            rows.append(
+                {
+                    "start": s.start,
+                    "duration_label": duration_label,
+                    "kwh": s.kwh,
+                    "actual_cost": s.actual_cost,
+                    "shifted_cost": s.counterfactual_cost,
+                    "saved": s.savings,
+                }
+            )
+
+    return render(
+        request,
+        "catalog/ev.html",
+        {
+            "section": "catalog",
+            "has_source": series is not None,
+            "sessions": rows,
+            "total_savings": sum(r["saved"] for r in rows),
+            "lookback_days": EV_LOOKBACK_DAYS,
+        },
+    )

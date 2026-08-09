@@ -7,6 +7,7 @@ dependencies = [
     "django>=5.2,<6",
     "pyenphase>=3.2.0",
     "python-dotenv>=1.2.2",
+    "tesla-fleet-api>=1.8.2",
     "uvicorn>=0.52.1",
     "whitenoise>=6.12.0",
 ]
