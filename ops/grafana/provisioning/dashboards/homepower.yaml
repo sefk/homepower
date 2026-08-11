@@ -1,0 +1,13 @@
+apiVersion: 1
+
+# Dashboards are files in the repo, not Grafana-DB state. Edits made in the
+# UI are not persisted — export the JSON and commit it instead.
+providers:
+  - name: homepower
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /Users/sefk/src/homepower/ops/grafana/dashboards
+      foldersFromFilesStructure: false

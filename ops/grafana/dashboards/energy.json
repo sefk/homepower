@@ -1,0 +1,224 @@
+{
+  "uid": "homepower-energy",
+  "title": "Energy",
+  "tags": ["homepower"],
+  "timezone": "browser",
+  "editable": false,
+  "schemaVersion": 39,
+  "refresh": "5m",
+  "time": { "from": "now-7d", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "series",
+        "label": "Series",
+        "type": "query",
+        "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+        "query": "SELECT so.slug || '/' || se.metric FROM core_series se JOIN core_source so ON so.id = se.source_id ORDER BY so.kind, 1",
+        "refresh": 1,
+        "multi": true,
+        "includeAll": true,
+        "current": { "text": "All", "value": "$__all" },
+        "options": []
+      },
+      {
+        "name": "grid",
+        "label": "Grid series",
+        "type": "query",
+        "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+        "query": "SELECT so.slug || '/' || se.metric FROM core_series se JOIN core_source so ON so.id = se.source_id WHERE so.kind = 'grid' AND se.unit = 'W' ORDER BY 1",
+        "refresh": 1,
+        "multi": false,
+        "includeAll": false,
+        "current": { "text": "eagle/demand_w", "value": "eagle/demand_w" },
+        "options": []
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "timeseries",
+      "id": 1,
+      "title": "$series — kWh per hour",
+      "description": "Energy integrated from stored samples only: power series are summed as value x duration, energy series are summed as-is. Hours the collector missed are short, not filled — read them against the coverage panel below.",
+      "repeat": "series",
+      "repeatDirection": "h",
+      "maxPerRow": 2,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+          "queryType": "time series",
+          "timeColumns": ["time"],
+          "rawQueryText": "SELECT $__unixEpochGroupSeconds(t, 3600) AS time,\n       SUM(wh) / 1000.0 AS \"kWh\"\nFROM (\n  SELECT CAST(strftime('%s', s.ts) AS INTEGER) AS t,\n         CASE WHEN se.unit = 'W' THEN s.value * s.duration_s / 3600.0 ELSE s.value END AS wh\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE so.slug || '/' || se.metric = '$series'\n    AND s.ts >= datetime($__from / 1000, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n)\nGROUP BY 1\nORDER BY 1",
+          "queryText": "SELECT $__unixEpochGroupSeconds(t, 3600) AS time,\n       SUM(wh) / 1000.0 AS \"kWh\"\nFROM (\n  SELECT CAST(strftime('%s', s.ts) AS INTEGER) AS t,\n         CASE WHEN se.unit = 'W' THEN s.value * s.duration_s / 3600.0 ELSE s.value END AS wh\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE so.slug || '/' || se.metric = '$series'\n    AND s.ts >= datetime($__from / 1000, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n)\nGROUP BY 1\nORDER BY 1"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false, "calcs": [] },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatth",
+          "decimals": 2,
+          "color": { "mode": "fixed", "fixedColor": "#4B7FD6" },
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 70,
+            "barAlignment": 0,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisCenteredZero": true
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 2,
+      "title": "$series — observed time per hour",
+      "description": "How much of each hour the collector actually observed, from the sum of sample durations. A short bar in the kWh chart above is only meaningful once you know whether this bar was full. The trailing bar is always short — that hour is still in progress.",
+      "repeat": "series",
+      "repeatDirection": "h",
+      "maxPerRow": 2,
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+          "queryType": "time series",
+          "timeColumns": ["time"],
+          "rawQueryText": "SELECT $__unixEpochGroupSeconds(t, 3600) AS time,\n       MIN(100.0, SUM(d) / 36.0) AS \"observed\"\nFROM (\n  SELECT CAST(strftime('%s', s.ts) AS INTEGER) AS t, s.duration_s AS d\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE so.slug || '/' || se.metric = '$series'\n    AND s.ts >= datetime($__from / 1000, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n)\nGROUP BY 1\nORDER BY 1",
+          "queryText": "SELECT $__unixEpochGroupSeconds(t, 3600) AS time,\n       MIN(100.0, SUM(d) / 36.0) AS \"observed\"\nFROM (\n  SELECT CAST(strftime('%s', s.ts) AS INTEGER) AS t, s.duration_s AS d\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE so.slug || '/' || se.metric = '$series'\n    AND s.ts >= datetime($__from / 1000, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n)\nGROUP BY 1\nORDER BY 1"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false, "calcs": [] },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 0,
+          "min": 0,
+          "max": 100,
+          "color": { "mode": "fixed", "fixedColor": "#4B7FD6" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "transparent", "value": null },
+              { "color": "#D08E2C", "value": 99 }
+            ]
+          },
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "barAlignment": 0,
+            "showPoints": "never",
+            "spanNulls": false,
+            "gradientMode": "none",
+            "thresholdsStyle": { "mode": "line" }
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 3,
+      "title": "Grid import and export per day",
+      "description": "Local calendar days (not UTC), split by polarity: warm is bought from PG&E, cool is sent back. Days at the edge of the selected range are partial.",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 14 },
+      "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+          "queryType": "time series",
+          "timeColumns": ["time"],
+          "rawQueryText": "SELECT CAST(strftime('%s', datetime(s.ts, 'localtime', 'start of day'), 'utc') AS INTEGER) AS time,\n       SUM(CASE WHEN s.value > 0 THEN s.value * s.duration_s ELSE 0 END) / 3600000.0 AS \"imported\",\n       -SUM(CASE WHEN s.value < 0 THEN -s.value * s.duration_s ELSE 0 END) / 3600000.0 AS \"exported\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug || '/' || se.metric = '$grid'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')\nGROUP BY 1\nORDER BY 1",
+          "queryText": "SELECT CAST(strftime('%s', datetime(s.ts, 'localtime', 'start of day'), 'utc') AS INTEGER) AS time,\n       SUM(CASE WHEN s.value > 0 THEN s.value * s.duration_s ELSE 0 END) / 3600000.0 AS \"imported\",\n       -SUM(CASE WHEN s.value < 0 THEN -s.value * s.duration_s ELSE 0 END) / 3600000.0 AS \"exported\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug || '/' || se.metric = '$grid'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')\nGROUP BY 1\nORDER BY 1"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": ["sum"] },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatth",
+          "decimals": 1,
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 70,
+            "barAlignment": 0,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisCenteredZero": true,
+            "stacking": { "mode": "normal", "group": "A" }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "imported" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#C4463A" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "exported" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#2E8B7F" } }]
+          }
+        ]
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 4,
+      "title": "$series — kWh per local day",
+      "description": "Daily totals on local calendar days, so a day is the day you lived, not a UTC window.",
+      "repeat": "series",
+      "repeatDirection": "h",
+      "maxPerRow": 2,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
+      "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+          "queryType": "time series",
+          "timeColumns": ["time"],
+          "rawQueryText": "SELECT CAST(strftime('%s', datetime(s.ts, 'localtime', 'start of day'), 'utc') AS INTEGER) AS time,\n       SUM(CASE WHEN se.unit = 'W' THEN s.value * s.duration_s / 3600.0 ELSE s.value END) / 1000.0 AS \"kWh\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug || '/' || se.metric = '$series'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')\nGROUP BY 1\nORDER BY 1",
+          "queryText": "SELECT CAST(strftime('%s', datetime(s.ts, 'localtime', 'start of day'), 'utc') AS INTEGER) AS time,\n       SUM(CASE WHEN se.unit = 'W' THEN s.value * s.duration_s / 3600.0 ELSE s.value END) / 1000.0 AS \"kWh\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug || '/' || se.metric = '$series'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')\nGROUP BY 1\nORDER BY 1"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false, "calcs": [] },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatth",
+          "decimals": 1,
+          "color": { "mode": "fixed", "fixedColor": "#7C8CA8" },
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 70,
+            "barAlignment": 0,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisCenteredZero": true
+          }
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

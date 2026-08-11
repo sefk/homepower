@@ -1,0 +1,222 @@
+{
+  "uid": "homepower-health",
+  "title": "Data Health",
+  "tags": ["homepower"],
+  "timezone": "browser",
+  "editable": false,
+  "schemaVersion": 39,
+  "refresh": "1m",
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "series",
+        "label": "Series",
+        "type": "query",
+        "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+        "query": "SELECT so.slug || '/' || se.metric FROM core_series se JOIN core_source so ON so.id = se.source_id ORDER BY so.kind, 1",
+        "refresh": 1,
+        "multi": true,
+        "includeAll": true,
+        "current": { "text": "All", "value": "$__all" },
+        "options": []
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "id": 1,
+      "title": "$series",
+      "description": "Seconds since the newest stored sample. Green is fresh, red means the collector has been quiet long enough to be worth looking at.",
+      "repeat": "series",
+      "repeatDirection": "h",
+      "maxPerRow": 4,
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "SELECT strftime('%s', 'now') - strftime('%s', MAX(s.ts)) AS \"age\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug || '/' || se.metric = '$series'",
+          "queryText": "SELECT strftime('%s', 'now') - strftime('%s', MAX(s.ts)) AS \"age\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug || '/' || se.metric = '$series'"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "noValue": "no samples",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "#3D8A62", "value": null },
+              { "color": "#D08E2C", "value": 300 },
+              { "color": "#C4463A", "value": 1800 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "table",
+      "id": 2,
+      "title": "Series",
+      "description": "Every series the collector knows about. Coverage is the fraction of the last 24h explicitly marked known by a CoverageSpan — unknown time is neither covered nor zero.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 4 },
+      "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+          "queryType": "table",
+          "timeColumns": ["last sample"],
+          "rawQueryText": "SELECT so.slug AS \"source\",\n       so.kind AS \"kind\",\n       se.metric AS \"metric\",\n       se.unit AS \"unit\",\n       so.native_resolution_s AS \"native res (s)\",\n       so.enabled AS \"enabled\",\n       CAST(strftime('%s', MAX(s.ts)) AS INTEGER) AS \"last sample\",\n       strftime('%s', 'now') - strftime('%s', MAX(s.ts)) AS \"age (s)\",\n       SUM(CASE WHEN s.ts >= datetime('now', '-24 hours') THEN 1 ELSE 0 END) AS \"samples 24h\",\n       (SELECT MIN(100.0, 100.0 * SUM(MAX(0,\n                 strftime('%s', MIN(c.end, datetime('now')))\n               - strftime('%s', MAX(c.start, datetime('now', '-24 hours'))))) / 86400.0)\n          FROM core_coveragespan c\n         WHERE c.series_id = se.id\n           AND c.end >= datetime('now', '-24 hours')\n           AND c.state IN ('live', 'backfilled')) AS \"coverage 24h (%)\"\nFROM core_series se\nJOIN core_source so ON so.id = se.source_id\nLEFT JOIN core_sample s ON s.series_id = se.id\nGROUP BY se.id\nORDER BY so.kind, so.slug, se.metric",
+          "queryText": "SELECT so.slug AS \"source\",\n       so.kind AS \"kind\",\n       se.metric AS \"metric\",\n       se.unit AS \"unit\",\n       so.native_resolution_s AS \"native res (s)\",\n       so.enabled AS \"enabled\",\n       CAST(strftime('%s', MAX(s.ts)) AS INTEGER) AS \"last sample\",\n       strftime('%s', 'now') - strftime('%s', MAX(s.ts)) AS \"age (s)\",\n       SUM(CASE WHEN s.ts >= datetime('now', '-24 hours') THEN 1 ELSE 0 END) AS \"samples 24h\",\n       (SELECT MIN(100.0, 100.0 * SUM(MAX(0,\n                 strftime('%s', MIN(c.end, datetime('now')))\n               - strftime('%s', MAX(c.start, datetime('now', '-24 hours'))))) / 86400.0)\n          FROM core_coveragespan c\n         WHERE c.series_id = se.id\n           AND c.end >= datetime('now', '-24 hours')\n           AND c.state IN ('live', 'backfilled')) AS \"coverage 24h (%)\"\nFROM core_series se\nJOIN core_source so ON so.id = se.source_id\nLEFT JOIN core_sample s ON s.series_id = se.id\nGROUP BY se.id\nORDER BY so.kind, so.slug, se.metric"
+        }
+      ],
+      "options": { "showHeader": true, "cellHeight": "sm" },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto", "filterable": false } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "coverage 24h (%)" },
+            "properties": [
+              { "id": "unit", "value": "percent" },
+              { "id": "decimals", "value": 1 },
+              { "id": "custom.cellOptions", "value": { "type": "color-text" } },
+              { "id": "noValue", "value": "unknown" },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "#C4463A", "value": null },
+                    { "color": "#D08E2C", "value": 90 },
+                    { "color": "#3D8A62", "value": 99 }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "age (s)" },
+            "properties": [
+              { "id": "unit", "value": "s" },
+              { "id": "custom.cellOptions", "value": { "type": "color-text" } },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "#3D8A62", "value": null },
+                    { "color": "#D08E2C", "value": 300 },
+                    { "color": "#C4463A", "value": 1800 }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 3,
+      "title": "Collector polls per 5 minutes",
+      "description": "Poll attempts bucketed by outcome. A source that stops polling shows up as the bars stopping, which is different from polling and failing.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+          "queryType": "time series",
+          "timeColumns": ["time"],
+          "rawQueryText": "SELECT $__unixEpochGroupSeconds(t, 300) AS time,\n       SUM(CASE WHEN ok = 1 THEN 1 ELSE 0 END) AS \"succeeded\",\n       SUM(CASE WHEN ok IS NOT 1 THEN 1 ELSE 0 END) AS \"failed\"\nFROM (\n  SELECT CAST(strftime('%s', r.started) AS INTEGER) AS t, r.ok AS ok\n  FROM core_collectorrun r\n  WHERE r.started >= datetime($__from / 1000, 'unixepoch')\n    AND r.started <  datetime($__to / 1000, 'unixepoch')\n)\nGROUP BY 1\nORDER BY 1",
+          "queryText": "SELECT $__unixEpochGroupSeconds(t, 300) AS time,\n       SUM(CASE WHEN ok = 1 THEN 1 ELSE 0 END) AS \"succeeded\",\n       SUM(CASE WHEN ok IS NOT 1 THEN 1 ELSE 0 END) AS \"failed\"\nFROM (\n  SELECT CAST(strftime('%s', r.started) AS INTEGER) AS t, r.ok AS ok\n  FROM core_collectorrun r\n  WHERE r.started >= datetime($__from / 1000, 'unixepoch')\n    AND r.started <  datetime($__to / 1000, 'unixepoch')\n)\nGROUP BY 1\nORDER BY 1"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": [] },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 70,
+            "barAlignment": 0,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "mode": "normal", "group": "A" }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "succeeded" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#3D8A62" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "failed" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#C4463A" } }]
+          }
+        ]
+      }
+    },
+    {
+      "type": "table",
+      "id": 4,
+      "title": "Failed polls",
+      "description": "Runs in the selected range that did not finish ok. A null outcome means the process died mid-poll.",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 20 },
+      "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+          "queryType": "table",
+          "timeColumns": ["started"],
+          "rawQueryText": "SELECT CAST(strftime('%s', r.started) AS INTEGER) AS \"started\",\n       so.slug AS \"source\",\n       CASE WHEN r.ok IS NULL THEN 'died mid-run' ELSE 'failed' END AS \"outcome\",\n       ROUND((julianday(r.finished) - julianday(r.started)) * 86400.0, 2) AS \"took (s)\",\n       r.message AS \"message\"\nFROM core_collectorrun r\nJOIN core_source so ON so.id = r.source_id\nWHERE r.ok IS NOT 1\n  AND r.started >= datetime($__from / 1000, 'unixepoch')\n  AND r.started <  datetime($__to / 1000, 'unixepoch')\nORDER BY r.started DESC\nLIMIT 200",
+          "queryText": "SELECT CAST(strftime('%s', r.started) AS INTEGER) AS \"started\",\n       so.slug AS \"source\",\n       CASE WHEN r.ok IS NULL THEN 'died mid-run' ELSE 'failed' END AS \"outcome\",\n       ROUND((julianday(r.finished) - julianday(r.started)) * 86400.0, 2) AS \"took (s)\",\n       r.message AS \"message\"\nFROM core_collectorrun r\nJOIN core_source so ON so.id = r.source_id\nWHERE r.ok IS NOT 1\n  AND r.started >= datetime($__from / 1000, 'unixepoch')\n  AND r.started <  datetime($__to / 1000, 'unixepoch')\nORDER BY r.started DESC\nLIMIT 200"
+        }
+      ],
+      "options": { "showHeader": true, "cellHeight": "sm" },
+      "fieldConfig": { "defaults": { "custom": { "align": "auto" } }, "overrides": [] }
+    },
+    {
+      "type": "table",
+      "id": 5,
+      "title": "Coverage spans",
+      "description": "Intervals whose status is explicitly known. Anything not listed here is unknown — the gap between spans is the thing to read, not the spans themselves.",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 20 },
+      "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+          "queryType": "table",
+          "timeColumns": ["start", "end"],
+          "rawQueryText": "SELECT CAST(strftime('%s', c.start) AS INTEGER) AS \"start\",\n       CAST(strftime('%s', c.end) AS INTEGER) AS \"end\",\n       so.slug || '/' || se.metric AS \"series\",\n       c.state AS \"state\",\n       ROUND((julianday(c.end) - julianday(c.start)) * 24.0, 2) AS \"hours\"\nFROM core_coveragespan c\nJOIN core_series se ON se.id = c.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE c.end >= datetime($__from / 1000, 'unixepoch')\n  AND c.start < datetime($__to / 1000, 'unixepoch')\nORDER BY c.start DESC\nLIMIT 500",
+          "queryText": "SELECT CAST(strftime('%s', c.start) AS INTEGER) AS \"start\",\n       CAST(strftime('%s', c.end) AS INTEGER) AS \"end\",\n       so.slug || '/' || se.metric AS \"series\",\n       c.state AS \"state\",\n       ROUND((julianday(c.end) - julianday(c.start)) * 24.0, 2) AS \"hours\"\nFROM core_coveragespan c\nJOIN core_series se ON se.id = c.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE c.end >= datetime($__from / 1000, 'unixepoch')\n  AND c.start < datetime($__to / 1000, 'unixepoch')\nORDER BY c.start DESC\nLIMIT 500"
+        }
+      ],
+      "options": { "showHeader": true, "cellHeight": "sm" },
+      "fieldConfig": { "defaults": { "custom": { "align": "auto" } }, "overrides": [] }
+    }
+  ]
+}

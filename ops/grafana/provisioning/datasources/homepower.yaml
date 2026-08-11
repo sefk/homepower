@@ -1,0 +1,14 @@
+apiVersion: 1
+
+# The collector's SQLite database, opened read-only (the plugin forces
+# _pragma=query_only(1)). Grafana never writes here; the Django process
+# remains the only writer.
+datasources:
+  - name: homepower
+    uid: homepower-sqlite
+    type: frser-sqlite-datasource
+    access: proxy
+    isDefault: true
+    editable: false
+    jsonData:
+      path: /Users/sefk/src/homepower/db.sqlite3

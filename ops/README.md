@@ -28,6 +28,69 @@ launchctl bootout gui/$(id -u)/com.sefk.homepower        # stop + unload
 
 - `var/log/homepower.log` — application log (rotating, 5×10MB)
 - `var/log/launchd.out.log`, `var/log/launchd.err.log` — process stdout/stderr
+- `var/grafana/log/grafana.log` — Grafana; `var/log/grafana.{out,err}.log` for
+  its stdout/stderr
+
+## Grafana (live dashboards)
+
+Grafana reads the same SQLite database directly and serves real-time
+dashboards on **http://studio.local:3425/**. It only ever reads: the SQLite
+datasource plugin forces `_pragma=query_only(1)`, so the Django process stays
+the single writer. Nothing about the collectors changes to support it.
+
+Install, once:
+
+```sh
+brew install grafana
+grafana cli --homepath /opt/homebrew/opt/grafana/share/grafana \
+  --pluginsDir "$PWD/var/grafana/plugins" \
+  plugins install frser-sqlite-datasource
+
+cp ops/com.sefk.grafana.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.sefk.grafana.plist
+```
+
+Same launchctl verbs as the app (`kickstart -k` to restart, `bootout` to
+stop). Don't also run `brew services start grafana` — Homebrew's service
+hardcodes `/opt/homebrew/etc/grafana.ini` and would fight this one for the
+port.
+
+Everything is config-as-code under `ops/grafana/`:
+
+| Path | What |
+| --- | --- |
+| `grafana.ini` | port, anonymous LAN read access, paths into `var/grafana/` |
+| `provisioning/datasources/` | the SQLite datasource, pinned to `db.sqlite3` |
+| `provisioning/dashboards/` | points Grafana at the dashboard directory |
+| `dashboards/*.json` | the dashboards themselves |
+| `check_panels.py` | runs every panel's SQL and reports failures |
+
+Dashboards are provisioned read-only and re-read from disk every 30s, so
+editing a JSON file is enough — no restart, no export step. The UI's edit
+controls are disabled on purpose: a dashboard saved in the browser would be
+state Grafana owns and git doesn't.
+
+- **Live Power** (also the home dashboard) — solar vs. grid at native
+  resolution, 10s refresh, today's kWh
+- **Data Health** — sample freshness, coverage percentage, poll outcomes
+- **Energy** — kWh per hour and per local day, with the observed-time panel
+  that says how much of each bucket was actually seen
+
+The panels honour the same invariant the app does: a gap is drawn as a gap
+(`insertNulls` breaks the line past ~3× a source's native resolution) and
+energy totals only ever integrate stored samples, so an outage shows up as a
+short bar next to an incomplete coverage bar rather than as a low-usage hour.
+
+Dashboards discover series from the database rather than hardcoding them, so
+SolarEdge and Tesla panels appear on their own once those collectors have
+credentials and start writing. After editing any dashboard JSON:
+
+```sh
+python3 ops/grafana/check_panels.py    # every query, against the live instance
+```
+
+A broken query renders as an empty panel, which looks exactly like a data
+gap — hence the checker.
 
 ## macOS Local Network privacy (one-time)
 

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.sefk.grafana</string>
+
+    <!-- Homebrew's own grafana service hardcodes /opt/homebrew/etc/grafana.ini;
+         this agent runs the same binary against the repo's config instead, so
+         the dashboards stay version-controlled. Don't run both. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/grafana</string>
+        <string>server</string>
+        <string>--config</string>
+        <string>/Users/sefk/src/homepower/ops/grafana/grafana.ini</string>
+        <string>--homepath</string>
+        <string>/opt/homebrew/opt/grafana/share/grafana</string>
+        <string>--packaging=brew</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/sefk/src/homepower</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <key>StandardOutPath</key>
+    <string>/Users/sefk/src/homepower/var/log/grafana.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/sefk/src/homepower/var/log/grafana.err.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/bin:/bin</string>
+        <!-- SQLite's 'localtime' modifier (used for local-day buckets) reads
+             this; launchd jobs otherwise get UTC. -->
+        <key>TZ</key>
+        <string>America/Los_Angeles</string>
+    </dict>
+</dict>
+</plist>

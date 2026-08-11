@@ -64,6 +64,11 @@ listed with the question it answers. Highlights:
 - `/ev/` — Tesla charge sessions: kWh, actual cost, and what shifting
   the session past 9pm would have cost instead
 
+A Grafana instance on **http://localhost:3425/** serves live dashboards off
+the same SQLite database, read-only — Live Power (10s refresh), Data Health,
+and Energy. It's config-as-code in `ops/grafana/`; install and operation are
+in [ops/README.md][ops].
+
 The Eagle 3 pushes to `POST /ingest/eagle/`; see [ops/README.md][ops]
 for configuring its uploader. Historical grid data imports from PG&E
 Green Button CSVs via `manage.py import_greenbutton` (backfilled
@@ -78,7 +83,7 @@ For boot-time operation under `launchd`, see [ops/README.md][ops].
 | `core/` | schema (samples at native resolution + coverage spans) and coverage/aggregation logic |
 | `collectors/` | collector base, per-source scheduler, Envoy integration, `serve` command |
 | `catalog/` | the analyses; each view states the question it answers |
-| `ops/` | launchd plist and install notes |
+| `ops/` | launchd plists, install notes, Grafana config and dashboards |
 | `docs/prd/homepower/` | PRD and discovery notes |
 | `var/` | runtime state: logs, cached vendor tokens (gitignored) |
 
@@ -94,6 +99,10 @@ For boot-time operation under `launchd`, see [ops/README.md][ops].
 - **Envoy token churn is normal.** Firmware D7+ requires an
   Enlighten-minted JWT for the local API; it's cached in `var/` and
   re-minted automatically when rejected.
+- **Grafana is a reader, not a second writer.** It opens `db.sqlite3` with
+  `query_only`, so the collector process keeps sole write access and the
+  dashboards can't perturb what they're measuring. Its own state lives in
+  `var/grafana/`; the dashboards live in git.
 - **Tesla refresh tokens rotate on every use.** Like the Envoy JWT, the
   current one is cached in `var/tesla_token.json` and updated after
   every poll, so a restart doesn't need `manage.py tesla_auth` re-run.
