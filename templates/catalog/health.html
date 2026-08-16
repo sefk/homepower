@@ -64,6 +64,14 @@
 .failures { margin: 0.75rem 0 0; padding: 0; list-style: none; font-size: 0.85rem; }
 .failures li { color: var(--ink-2); }
 .failures .when { color: var(--muted); font-variant-numeric: tabular-nums; }
+.failures-head {
+  margin: 0.75rem 0 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--status-critical);
+}
+.recovered { margin: 0.75rem 0 0; font-size: 0.85rem; color: var(--muted); }
+.recovered .when { font-variant-numeric: tabular-nums; }
 </style>
 {% endblock %}
 
@@ -120,11 +128,18 @@
   </p>
 
   {% if row.failures %}
+  <p class="failures-head">Failing now — no successful poll since {% if row.recovered_at %}{{ row.recovered_at|date:"M j H:i" }}{% else %}startup{% endif %}</p>
   <ul class="failures">
     {% for run in row.failures %}
     <li><span class="when">{{ run.started|date:"M j H:i" }}</span> — {{ run.message|truncatechars:120 }}</li>
     {% endfor %}
   </ul>
+  {% elif row.recovered_count %}
+  <p class="recovered">
+    Recovered — {{ row.recovered_count }} failure{{ row.recovered_count|pluralize }}
+    in the last {{ window_days }} days, last at
+    <span class="when">{{ row.recovered_last.started|date:"M j H:i" }}</span>.
+  </p>
   {% endif %}
 </section>
 {% empty %}

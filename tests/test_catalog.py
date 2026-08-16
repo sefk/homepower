@@ -3,9 +3,10 @@
 from datetime import timedelta
 
 import pytest
+from django.utils import timezone
 
 from core.coverage import record_coverage
-from core.models import CoverageSpan, Sample, Source
+from core.models import CollectorRun, CoverageSpan, Sample, Source
 
 from .conftest import utc
 
@@ -39,6 +40,69 @@ class TestHealth:
         assert b"ADU solar" in resp.content
         assert b"production_w" in resp.content
         assert b"stale" in resp.content  # last sample is from 2026-08-01
+
+    def test_failures_before_a_success_read_as_recovered(self, solar_day, client):
+        """A fixed outage must not look like an ongoing one (the whole point:
+        stale errors on /health/ made a recovered Envoy look stuck)."""
+        source = solar_day.source
+        now = timezone.now()
+        for minutes in (40, 39, 38):
+            CollectorRun.objects.create(
+                source=source,
+                started=now - timedelta(minutes=minutes),
+                ok=False,
+                message="Cannot connect to host 10.10.0.222:443 [No route to host]",
+            )
+        CollectorRun.objects.create(source=source, started=now - timedelta(minutes=1), ok=True)
+
+        resp = client.get("/health/")
+        assert b"Recovered" in resp.content
+        assert b"3 failures" in resp.content
+        assert b"No route to host" not in resp.content  # stale errors stay hidden
+        assert b"Failing now" not in resp.content
+
+    def test_failures_after_last_success_still_show(self, solar_day, client):
+        source = solar_day.source
+        now = timezone.now()
+        CollectorRun.objects.create(source=source, started=now - timedelta(minutes=30), ok=True)
+        CollectorRun.objects.create(
+            source=source,
+            started=now - timedelta(minutes=2),
+            ok=False,
+            message="Cannot connect to host 10.10.0.222:443 [No route to host]",
+        )
+
+        resp = client.get("/health/")
+        assert b"Failing now" in resp.content
+        assert b"No route to host" in resp.content
+        assert b"Recovered" not in resp.content
+
+    def test_failures_with_no_success_ever_show(self, solar_day, client):
+        CollectorRun.objects.create(
+            source=solar_day.source,
+            started=timezone.now() - timedelta(minutes=2),
+            ok=False,
+            message="Unable to connect to Envoy",
+        )
+
+        resp = client.get("/health/")
+        assert b"Failing now" in resp.content
+        assert b"since startup" in resp.content
+
+    def test_recovered_failures_outside_the_window_are_dropped(self, solar_day, client):
+        source = solar_day.source
+        now = timezone.now()
+        CollectorRun.objects.create(
+            source=source,
+            started=now - timedelta(days=30),
+            ok=False,
+            message="ancient history",
+        )
+        CollectorRun.objects.create(source=source, started=now - timedelta(minutes=1), ok=True)
+
+        resp = client.get("/health/")
+        assert b"Recovered" not in resp.content
+        assert b"ancient history" not in resp.content
 
     def test_index_no_longer_redirects(self, db, client):
         # / is the catalog index now (see tests/test_cost_views.py); this

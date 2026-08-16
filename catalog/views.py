@@ -216,6 +216,19 @@ def health(request):
             Sample.objects.filter(series__source=source).order_by("-ts").first()
         )
         stale_after = timedelta(seconds=STALE_POLLS * source.poll_interval_s)
+
+        # Only failures since the last success are still happening; anything
+        # older is history the collector has already recovered from. Showing
+        # both alike made a fixed outage look identical to an ongoing one.
+        last_ok = source.runs.filter(ok=True).order_by("-started").first()
+        failures = source.runs.filter(ok=False)
+        if last_ok is not None:
+            failures = failures.filter(started__gt=last_ok.started)
+        resolved = source.runs.filter(ok=False, started__gte=window_start)
+        if last_ok is not None:
+            resolved = resolved.filter(started__lte=last_ok.started)
+        resolved_last = resolved.order_by("-started").first()
+
         sources.append(
             {
                 "source": source,
@@ -223,9 +236,10 @@ def health(request):
                 "series_rows": series_rows,
                 "last_sample": last_sample,
                 "stale": last_sample is None or now - last_sample.ts > stale_after,
-                "failures": list(
-                    source.runs.filter(ok=False).order_by("-started")[:5]
-                ),
+                "failures": list(failures.order_by("-started")[:5]),
+                "recovered_count": resolved.count(),
+                "recovered_last": resolved_last,
+                "recovered_at": last_ok.started if last_ok else None,
             }
         )
 
