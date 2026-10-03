@@ -13,7 +13,7 @@ def utc(*args) -> datetime:
 def series(db) -> Series:
     source = Source.objects.create(
         slug="envoy",
-        name="ADU solar (Enphase Envoy)",
+        name="Guest House Solar",
         kind=Source.Kind.SOLAR,
         poll_interval_s=60,
         native_resolution_s=60,

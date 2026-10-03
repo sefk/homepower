@@ -117,7 +117,7 @@ class EagleCollector(Collector):
     """Push-driven: the view stores readings; there is no poll loop."""
 
     slug = "eagle"
-    name = "Grid (PG&E meter via Eagle 3)"
+    name = "PG&E Grid"
     kind = Source.Kind.GRID
     # cumulative registers: the delta is exact across any gap
     always_bridge = frozenset({"energy_delivered_wh", "energy_received_wh"})

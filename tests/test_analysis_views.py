@@ -27,7 +27,7 @@ def la(*args) -> datetime:
 def grid_series(db) -> Series:
     source = Source.objects.create(
         slug="eagle",
-        name="Grid (PG&E meter via Eagle 3)",
+        name="PG&E Grid",
         kind=Source.Kind.GRID,
         poll_interval_s=60,
         native_resolution_s=60,
@@ -39,7 +39,7 @@ def grid_series(db) -> Series:
 def adu_series(db) -> Series:
     source = Source.objects.create(
         slug="envoy",
-        name="ADU solar (Enphase Envoy)",
+        name="Guest House Solar",
         kind=Source.Kind.SOLAR,
         poll_interval_s=60,
         native_resolution_s=60,
@@ -51,7 +51,7 @@ def adu_series(db) -> Series:
 def main_series(db) -> Series:
     source = Source.objects.create(
         slug="solaredge",
-        name="Main solar (SolarEdge cloud)",
+        name="Main House Solar",
         kind=Source.Kind.SOLAR,
         poll_interval_s=900,
         native_resolution_s=900,
@@ -294,7 +294,7 @@ class TestSolarhealthData:
         record_coverage(main_series, ts, ts + timedelta(minutes=15), CoverageSpan.State.LIVE)
 
         traces = client.get("/solarhealth/data.json").json()["traces"]
-        adu_trace = next(t for t in traces if "ADU" in t["name"])
+        adu_trace = next(t for t in traces if "Guest House" in t["name"])
         main_trace = next(t for t in traces if "Main" in t["name"])
         assert adu_trace["y"][0] == pytest.approx(500.0)
         assert main_trace["y"][0] == pytest.approx(500.0)

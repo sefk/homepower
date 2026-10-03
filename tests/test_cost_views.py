@@ -28,7 +28,7 @@ def la(*args) -> datetime:
 def grid_series(db) -> Series:
     source = Source.objects.create(
         slug="eagle",
-        name="Grid (PG&E meter via Eagle 3)",
+        name="PG&E Grid",
         kind=Source.Kind.GRID,
         poll_interval_s=60,
         native_resolution_s=60,

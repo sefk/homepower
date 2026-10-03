@@ -37,7 +37,7 @@ class TestHealth:
     def test_shows_source_with_coverage_and_staleness(self, solar_day, client):
         resp = client.get("/health/")
         assert resp.status_code == 200
-        assert b"ADU solar" in resp.content
+        assert b"Guest House Solar" in resp.content
         assert b"production_w" in resp.content
         assert b"stale" in resp.content  # last sample is from 2026-08-01
 
@@ -152,11 +152,11 @@ class TestSolarPage:
         from core.models import Series, Source
 
         main = Source.objects.create(
-            slug="solaredge", name="Main solar (SolarEdge cloud)",
+            slug="solaredge", name="Main House Solar",
             kind=Source.Kind.SOLAR, poll_interval_s=900, native_resolution_s=900,
         )
         Series.objects.create(source=main, metric="production_w", unit="W")
         resp = client.get("/solar/?date=2026-08-01")
         assert resp.content.count(b"Hourly energy \xe2\x80\x94") == 2
-        assert b"ADU solar (Enphase Envoy)" in resp.content
-        assert b"Main solar (SolarEdge cloud)" in resp.content
+        assert b"Guest House Solar" in resp.content
+        assert b"Main House Solar" in resp.content

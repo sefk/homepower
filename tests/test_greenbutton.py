@@ -397,7 +397,7 @@ class TestGridHourlyWh:
     def _eagle_source(self):
         return Source.objects.create(
             slug="eagle",
-            name="Grid (PG&E meter via Eagle 3)",
+            name="PG&E Grid",
             kind=Source.Kind.GRID,
             poll_interval_s=15,
             native_resolution_s=15,
