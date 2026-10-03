@@ -565,3 +565,34 @@ class TestOverlappingDifferentTsSample:
         untouched_hour = grid_hourly_wh(day_start, day_start + timedelta(hours=1))
         assert untouched_hour.imported_wh == 0.0
         assert untouched_hour.coverage == 0.0
+
+
+# Current PG&E export: BOM + blank line, ISO dates, inclusive END TIME
+# (00:00-00:59), trailing NOTES column.
+CURRENT_FORMAT_CSV = """﻿
+Name,A Customer
+Address,"1 Main St, Somewhere CA"
+Account Number,1234567890
+Service,1234567891
+
+TYPE,DATE,START TIME,END TIME,IMPORT (kWh),EXPORT (kWh),COST,NOTES
+Electric usage,2025-08-01,22:00,22:59,1.20,0.00,$0.40
+Electric usage,2025-08-01,23:00,23:59,0.80,0.00,$0.30
+Electric usage,2025-08-02,00:00,00:59,0.50,0.10,$0.20
+"""
+
+
+@pytest.mark.django_db
+class TestCurrentExportFormat:
+    def test_iso_dates_and_inclusive_end_time_give_whole_hours(self, tmp_path):
+        path = _write(tmp_path, "current.csv", CURRENT_FORMAT_CSV)
+        call_command("import_greenbutton", path)
+
+        imp = Sample.objects.get(series__metric="grid_import_wh", ts=utc(2025, 8, 2, 6, 0))
+        assert imp.value == pytest.approx(800.0)
+        assert imp.duration_s == 3600  # 23:00-23:59 inclusive, across midnight
+        assert {s.duration_s for s in Sample.objects.all()} == {3600}
+
+        # Whole hours touch, so the three rows are one unbroken span.
+        series = Series.objects.get(metric="grid_import_wh")
+        assert uncovered(series, utc(2025, 8, 2, 5, 0), utc(2025, 8, 2, 8, 0)) == []

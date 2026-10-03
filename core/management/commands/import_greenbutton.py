@@ -36,8 +36,18 @@ from collectors.eagle import ensure_source
 from core.coverage import clear_coverage, record_coverage
 from core.models import CoverageSpan, Sample, Series
 
-# PG&E's DATE + TIME columns, tried in order.
-_DATETIME_FORMATS = ("%m/%d/%Y %H:%M", "%m/%d/%Y %H:%M:%S")
+# PG&E's DATE + TIME columns, tried in order. Older exports write
+# 08/01/2025; current ones write 2025-08-01.
+_DATETIME_FORMATS = (
+    "%m/%d/%Y %H:%M",
+    "%m/%d/%Y %H:%M:%S",
+    "%Y-%m-%d %H:%M",
+    "%Y-%m-%d %H:%M:%S",
+)
+# Current exports give END TIME as the interval's last minute (00:00 ->
+# 00:59, 00:15 -> 00:29), not its exclusive end. An end one minute shy
+# of a quarter-hour boundary is that inclusive form.
+_INCLUSIVE_END_MINUTE_STEP = 15
 # No END TIME column and only one row in the file: nothing to infer
 # spacing from. Picked as a plausible hourly default rather than left 0.
 _FALLBACK_DURATION_S = 3600
@@ -281,6 +291,8 @@ class Command(BaseCommand):
                             - ts.astimezone(dt_timezone.utc)
                         ).total_seconds()
                     )
+                    if (end_naive.minute + 1) % _INCLUSIVE_END_MINUTE_STEP == 0:
+                        duration_s += 60
             except (ValueError, IndexError):
                 unparseable += 1
                 continue
