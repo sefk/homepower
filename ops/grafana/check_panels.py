@@ -31,6 +31,7 @@ VARS = {
     "$series": "eagle/demand_w",
     "$__from": str(FROM_MS),
     "$__to": str(NOW_MS),
+    "$__interval_ms": "900000",
 }
 
 

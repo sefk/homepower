@@ -7,6 +7,9 @@
   "schemaVersion": 39,
   "refresh": "1m",
   "time": { "from": "now-24h", "to": "now" },
+  "links": [
+    { "type": "dashboards", "tags": ["homepower"], "title": "Home power", "asDropdown": false, "includeVars": false, "keepTime": true, "icon": "external link" }
+  ],
   "templating": {
     "list": [
       {

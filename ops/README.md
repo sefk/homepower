@@ -70,6 +70,16 @@ editing a JSON file is enough — no restart, no export step. The UI's edit
 controls are disabled on purpose: a dashboard saved in the browser would be
 state Grafana owns and git doesn't.
 
+- **Sources** — where power comes from: each array and grid import, now
+  and stacked over time; per-kW array comparison; monthly and yearly
+  production over all backfilled history
+- **Sinks** — where it goes: house load (derived as solar + grid) and
+  export, the always-on floor, the 4–9pm share, a load histogram and a
+  typical-day profile. Appliances and the car get slices here as their
+  collectors arrive
+- **Sources and Sinks** — the two together: solar→house, solar→grid and
+  grid→house energy, self-sufficiency and self-use, a mirrored balance
+  chart, daily balance and a time-of-use cost estimate
 - **Live Power** (also the home dashboard) — solar vs. grid at native
   resolution, 10s refresh, today's kWh
 - **Data Health** — sample freshness, coverage percentage, poll outcomes
@@ -81,9 +91,13 @@ The panels honour the same invariant the app does: a gap is drawn as a gap
 energy totals only ever integrate stored samples, so an outage shows up as a
 short bar next to an incomplete coverage bar rather than as a low-usage hour.
 
-Dashboards discover series from the database rather than hardcoding them, so
-SolarEdge and Tesla panels appear on their own once those collectors have
-credentials and start writing. After editing any dashboard JSON:
+Live Power, Energy and Data Health discover series from the database rather
+than hardcoding them, so new sources appear there on their own once their
+collectors start writing. Sources, Sinks and Sources and Sinks name the
+three sources (`solaredge`, `envoy`, `eagle`) in their SQL, because the
+arithmetic between them is the point; a new source needs adding there by
+hand. They open on the last 24 hours, and their daily and typical-day
+panels always show the last 30 days. After editing any dashboard JSON:
 
 ```sh
 python3 ops/grafana/check_panels.py    # every query, against the live instance

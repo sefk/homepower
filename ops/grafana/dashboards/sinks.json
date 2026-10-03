@@ -1,0 +1,707 @@
+{
+  "uid": "homepower-sinks",
+  "title": "Sinks",
+  "description": "Where the power goes: the house and, when there is surplus, back to PG&E. Appliances and the car join as their collectors arrive.",
+  "tags": [
+    "homepower"
+  ],
+  "timezone": "browser",
+  "editable": false,
+  "schemaVersion": 39,
+  "refresh": "1m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "homepower"
+      ],
+      "title": "Home power",
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": true,
+      "icon": "external link"
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "id": 1,
+      "title": "House load now",
+      "description": "Latest grid reading plus latest production from both arrays. An estimate: the three meters report at different rates, and SolarEdge runs a quarter-hour behind.",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "SELECT g.v + COALESCE(m.v, 0) + COALESCE(e.v, 0) AS v\nFROM (SELECT s.value AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'eagle' AND se.metric IN ('production_w', 'demand_w')\n  AND s.ts >= datetime('now', '-10 minutes')\nORDER BY s.ts DESC\nLIMIT 1) g\nLEFT JOIN (SELECT s.value AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'solaredge' AND se.metric IN ('production_w', 'demand_w')\n  AND s.ts >= datetime('now', '-45 minutes')\nORDER BY s.ts DESC\nLIMIT 1) m ON 1\nLEFT JOIN (SELECT s.value AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'envoy' AND se.metric IN ('production_w', 'demand_w')\n  AND s.ts >= datetime('now', '-10 minutes')\nORDER BY s.ts DESC\nLIMIT 1) e ON 1",
+          "queryText": "SELECT g.v + COALESCE(m.v, 0) + COALESCE(e.v, 0) AS v\nFROM (SELECT s.value AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'eagle' AND se.metric IN ('production_w', 'demand_w')\n  AND s.ts >= datetime('now', '-10 minutes')\nORDER BY s.ts DESC\nLIMIT 1) g\nLEFT JOIN (SELECT s.value AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'solaredge' AND se.metric IN ('production_w', 'demand_w')\n  AND s.ts >= datetime('now', '-45 minutes')\nORDER BY s.ts DESC\nLIMIT 1) m ON 1\nLEFT JOIN (SELECT s.value AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'envoy' AND se.metric IN ('production_w', 'demand_w')\n  AND s.ts >= datetime('now', '-10 minutes')\nORDER BY s.ts DESC\nLIMIT 1) e ON 1"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt",
+          "noValue": "unknown",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#4B7FD6"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "id": 2,
+      "title": "Exporting now",
+      "description": "Power going back to PG&E right now; 0 while importing.",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "SELECT MAX(-s.value, 0) AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'eagle' AND se.metric IN ('production_w', 'demand_w')\n  AND s.ts >= datetime('now', '-10 minutes')\nORDER BY s.ts DESC\nLIMIT 1",
+          "queryText": "SELECT MAX(-s.value, 0) AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'eagle' AND se.metric IN ('production_w', 'demand_w')\n  AND s.ts >= datetime('now', '-10 minutes')\nORDER BY s.ts DESC\nLIMIT 1"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt",
+          "noValue": "unknown",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#2E8B7F"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "id": 3,
+      "title": "House used",
+      "description": "Energy the house consumed over the selected range. House load is not metered: it is solar production plus grid power, per quarter-hour. A quarter-hour only counts once the grid meter and (in daylight) the main array have both reported, so the newest quarter-hour is usually blank.",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(($__from / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         MAX(CASE WHEN slug = 'eagle' THEN w END) AS grid\n  FROM raw\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND COALESCE(main, 0) + COALESCE(guest, 0) + grid >= 0\n              THEN COALESCE(main, 0) + COALESCE(guest, 0) + grid END AS load\n  FROM p\n)\nSELECT SUM(load) * 900 / 3600.0 / 1000.0 AS v FROM b WHERE load IS NOT NULL",
+          "queryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(($__from / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         MAX(CASE WHEN slug = 'eagle' THEN w END) AS grid\n  FROM raw\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND COALESCE(main, 0) + COALESCE(guest, 0) + grid >= 0\n              THEN COALESCE(main, 0) + COALESCE(guest, 0) + grid END AS load\n  FROM p\n)\nSELECT SUM(load) * 900 / 3600.0 / 1000.0 AS v FROM b WHERE load IS NOT NULL"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatth",
+          "decimals": 1,
+          "noValue": "unknown",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#4B7FD6"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "id": 4,
+      "title": "Sent to PG&E",
+      "description": "Grid export over the selected range.",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(($__from / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         MAX(CASE WHEN slug = 'eagle' THEN w END) AS grid\n  FROM raw\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND COALESCE(main, 0) + COALESCE(guest, 0) + grid >= 0\n              THEN COALESCE(main, 0) + COALESCE(guest, 0) + grid END AS load\n  FROM p\n)\nSELECT SUM(MAX(-grid, 0)) * 900 / 3600.0 / 1000.0 AS v FROM b WHERE load IS NOT NULL",
+          "queryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(($__from / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         MAX(CASE WHEN slug = 'eagle' THEN w END) AS grid\n  FROM raw\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND COALESCE(main, 0) + COALESCE(guest, 0) + grid >= 0\n              THEN COALESCE(main, 0) + COALESCE(guest, 0) + grid END AS load\n  FROM p\n)\nSELECT SUM(MAX(-grid, 0)) * 900 / 3600.0 / 1000.0 AS v FROM b WHERE load IS NOT NULL"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatth",
+          "decimals": 1,
+          "noValue": "unknown",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#2E8B7F"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "id": 5,
+      "title": "Always-on floor",
+      "description": "The lowest quarter-hour of house load in the range: what runs when nothing is 'on'. Every 100 W here is about 880 kWh a year.",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(($__from / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         MAX(CASE WHEN slug = 'eagle' THEN w END) AS grid\n  FROM raw\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND COALESCE(main, 0) + COALESCE(guest, 0) + grid >= 0\n              THEN COALESCE(main, 0) + COALESCE(guest, 0) + grid END AS load\n  FROM p\n)\nSELECT MIN(load) AS v FROM b WHERE load IS NOT NULL",
+          "queryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(($__from / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         MAX(CASE WHEN slug = 'eagle' THEN w END) AS grid\n  FROM raw\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND COALESCE(main, 0) + COALESCE(guest, 0) + grid >= 0\n              THEN COALESCE(main, 0) + COALESCE(guest, 0) + grid END AS load\n  FROM p\n)\nSELECT MIN(load) AS v FROM b WHERE load IS NOT NULL"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt",
+          "noValue": "unknown",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7C8CA8"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "id": 6,
+      "title": "Used 4–9pm",
+      "description": "House energy inside the peak-price window, over the selected range.",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(($__from / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         MAX(CASE WHEN slug = 'eagle' THEN w END) AS grid\n  FROM raw\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND COALESCE(main, 0) + COALESCE(guest, 0) + grid >= 0\n              THEN COALESCE(main, 0) + COALESCE(guest, 0) + grid END AS load\n  FROM p\n)\nSELECT SUM(load) * 900 / 3600.0 / 1000.0 AS v FROM b WHERE load IS NOT NULL AND CAST(strftime('%H', t, 'unixepoch', 'localtime') AS INTEGER) BETWEEN 16 AND 20",
+          "queryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(($__from / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         MAX(CASE WHEN slug = 'eagle' THEN w END) AS grid\n  FROM raw\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND COALESCE(main, 0) + COALESCE(guest, 0) + grid >= 0\n              THEN COALESCE(main, 0) + COALESCE(guest, 0) + grid END AS load\n  FROM p\n)\nSELECT SUM(load) * 900 / 3600.0 / 1000.0 AS v FROM b WHERE load IS NOT NULL AND CAST(strftime('%H', t, 'unixepoch', 'localtime') AS INTEGER) BETWEEN 16 AND 20"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatth",
+          "decimals": 1,
+          "noValue": "unknown",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#B5539E"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 7,
+      "title": "Use — where the power is going",
+      "description": "House load plus grid export, stacked: the top edge is everything being consumed or sent away, and matches the top edge of Supply on the Sources page. House load is not metered: it is solar production plus grid power, per quarter-hour. A quarter-hour only counts once the grid meter and (in daylight) the main array have both reported, so the newest quarter-hour is usually blank.",
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "time series",
+          "timeColumns": [
+            "time"
+          ],
+          "rawQueryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / MAX(900, ($__interval_ms / 1000 / 900) * 900)) * MAX(900, ($__interval_ms / 1000 / 900) * 900) AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(($__from / 1000 / MAX(900, ($__interval_ms / 1000 / 900) * 900)) * MAX(900, ($__interval_ms / 1000 / 900) * 900), 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         MAX(CASE WHEN slug = 'eagle' THEN w END) AS grid\n  FROM raw\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND COALESCE(main, 0) + COALESCE(guest, 0) + grid >= 0\n              THEN COALESCE(main, 0) + COALESCE(guest, 0) + grid END AS load\n  FROM p\n), ticks(t) AS (\n  SELECT ($__from / 1000 / MAX(900, ($__interval_ms / 1000 / 900) * 900)) * MAX(900, ($__interval_ms / 1000 / 900) * 900)\n  UNION ALL\n  SELECT t + MAX(900, ($__interval_ms / 1000 / 900) * 900) FROM ticks WHERE t + MAX(900, ($__interval_ms / 1000 / 900) * 900) < $__to / 1000\n)\nSELECT ticks.t AS time,\n       b.load AS \"House\",\n       MAX(-b.grid, 0) AS \"PG&E Grid export\"\nFROM ticks\nLEFT JOIN b ON b.t = ticks.t\nORDER BY 1",
+          "queryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / MAX(900, ($__interval_ms / 1000 / 900) * 900)) * MAX(900, ($__interval_ms / 1000 / 900) * 900) AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(($__from / 1000 / MAX(900, ($__interval_ms / 1000 / 900) * 900)) * MAX(900, ($__interval_ms / 1000 / 900) * 900), 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         MAX(CASE WHEN slug = 'eagle' THEN w END) AS grid\n  FROM raw\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND COALESCE(main, 0) + COALESCE(guest, 0) + grid >= 0\n              THEN COALESCE(main, 0) + COALESCE(guest, 0) + grid END AS load\n  FROM p\n), ticks(t) AS (\n  SELECT ($__from / 1000 / MAX(900, ($__interval_ms / 1000 / 900) * 900)) * MAX(900, ($__interval_ms / 1000 / 900) * 900)\n  UNION ALL\n  SELECT t + MAX(900, ($__interval_ms / 1000 / 900) * 900) FROM ticks WHERE t + MAX(900, ($__interval_ms / 1000 / 900) * 900) < $__to / 1000\n)\nSELECT ticks.t AS time,\n       b.load AS \"House\",\n       MAX(-b.grid, 0) AS \"PG&E Grid export\"\nFROM ticks\nLEFT JOIN b ON b.t = ticks.t\nORDER BY 1"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 45,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisCenteredZero": false,
+            "gradientMode": "none",
+            "lineInterpolation": "stepAfter",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "House"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#4B7FD6"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "PG&E Grid export"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#2E8B7F"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 8,
+      "title": "Daily use — peak window vs. the rest",
+      "description": "House kWh per local day, split at the 4–9pm peak-price window, with export alongside. Always the last 30 days, whatever the dashboard range.",
+      "gridPos": {
+        "h": 8,
+        "w": 14,
+        "x": 0,
+        "y": 14
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "time series",
+          "timeColumns": [
+            "time"
+          ],
+          "rawQueryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(($__from / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         MAX(CASE WHEN slug = 'eagle' THEN w END) AS grid\n  FROM raw\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND COALESCE(main, 0) + COALESCE(guest, 0) + grid >= 0\n              THEN COALESCE(main, 0) + COALESCE(guest, 0) + grid END AS load\n  FROM p\n)\nSELECT CAST(strftime('%s', datetime(t, 'unixepoch', 'localtime', 'start of day'), 'utc') AS INTEGER) AS time,\n       SUM(CASE WHEN CAST(strftime('%H', t, 'unixepoch', 'localtime') AS INTEGER) BETWEEN 16 AND 20 THEN load ELSE 0 END) * 900 / 3600.0 / 1000.0 AS \"House, 4–9pm\",\n       SUM(CASE WHEN CAST(strftime('%H', t, 'unixepoch', 'localtime') AS INTEGER) BETWEEN 16 AND 20 THEN 0 ELSE load END) * 900 / 3600.0 / 1000.0 AS \"House, off-peak\",\n       SUM(MAX(-grid, 0)) * 900 / 3600.0 / 1000.0 AS \"PG&E Grid export\"\nFROM b WHERE load IS NOT NULL\nGROUP BY 1\nORDER BY 1",
+          "queryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(($__from / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         MAX(CASE WHEN slug = 'eagle' THEN w END) AS grid\n  FROM raw\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND COALESCE(main, 0) + COALESCE(guest, 0) + grid >= 0\n              THEN COALESCE(main, 0) + COALESCE(guest, 0) + grid END AS load\n  FROM p\n)\nSELECT CAST(strftime('%s', datetime(t, 'unixepoch', 'localtime', 'start of day'), 'utc') AS INTEGER) AS time,\n       SUM(CASE WHEN CAST(strftime('%H', t, 'unixepoch', 'localtime') AS INTEGER) BETWEEN 16 AND 20 THEN load ELSE 0 END) * 900 / 3600.0 / 1000.0 AS \"House, 4–9pm\",\n       SUM(CASE WHEN CAST(strftime('%H', t, 'unixepoch', 'localtime') AS INTEGER) BETWEEN 16 AND 20 THEN 0 ELSE load END) * 900 / 3600.0 / 1000.0 AS \"House, off-peak\",\n       SUM(MAX(-grid, 0)) * 900 / 3600.0 / 1000.0 AS \"PG&E Grid export\"\nFROM b WHERE load IS NOT NULL\nGROUP BY 1\nORDER BY 1"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatth",
+          "decimals": 1,
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 70,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisCenteredZero": false,
+            "gradientMode": "none",
+            "barAlignment": 1,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "House, 4–9pm"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#B5539E"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "House, off-peak"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#4B7FD6"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "PG&E Grid export"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#2E8B7F"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "timeFrom": "30d"
+    },
+    {
+      "type": "histogram",
+      "id": 9,
+      "title": "How often the house draws how much",
+      "description": "Count of quarter-hours at each load level. Always the last 30 days, whatever the dashboard range. The tall bars on the left are the always-on floor; the long tail to the right is the big appliances.",
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 14,
+        "y": 14
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(($__from / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         MAX(CASE WHEN slug = 'eagle' THEN w END) AS grid\n  FROM raw\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND COALESCE(main, 0) + COALESCE(guest, 0) + grid >= 0\n              THEN COALESCE(main, 0) + COALESCE(guest, 0) + grid END AS load\n  FROM p\n)\nSELECT load AS \"House load\" FROM b WHERE load IS NOT NULL",
+          "queryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(($__from / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         MAX(CASE WHEN slug = 'eagle' THEN w END) AS grid\n  FROM raw\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND COALESCE(main, 0) + COALESCE(guest, 0) + grid >= 0\n              THEN COALESCE(main, 0) + COALESCE(guest, 0) + grid END AS load\n  FROM p\n)\nSELECT load AS \"House load\" FROM b WHERE load IS NOT NULL"
+        }
+      ],
+      "options": {
+        "bucketSize": 250,
+        "combine": false,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#4B7FD6"
+          },
+          "custom": {
+            "fillOpacity": 70,
+            "lineWidth": 1
+          }
+        },
+        "overrides": []
+      },
+      "timeFrom": "30d"
+    },
+    {
+      "type": "barchart",
+      "id": 10,
+      "title": "Typical day — house load by hour",
+      "description": "Average house load in each local hour. Always the last 30 days, whatever the dashboard range. 16:00–20:00 are the peak-price hours.",
+      "gridPos": {
+        "h": 8,
+        "w": 14,
+        "x": 0,
+        "y": 22
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(($__from / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         MAX(CASE WHEN slug = 'eagle' THEN w END) AS grid\n  FROM raw\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND COALESCE(main, 0) + COALESCE(guest, 0) + grid >= 0\n              THEN COALESCE(main, 0) + COALESCE(guest, 0) + grid END AS load\n  FROM p\n)\nSELECT strftime('%H:00', t, 'unixepoch', 'localtime') AS hour,\n       AVG(load) AS \"House load\"\nFROM b WHERE load IS NOT NULL\nGROUP BY 1\nORDER BY 1",
+          "queryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(($__from / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         MAX(CASE WHEN slug = 'eagle' THEN w END) AS grid\n  FROM raw\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND COALESCE(main, 0) + COALESCE(guest, 0) + grid >= 0\n              THEN COALESCE(main, 0) + COALESCE(guest, 0) + grid END AS load\n  FROM p\n)\nSELECT strftime('%H:00', t, 'unixepoch', 'localtime') AS hour,\n       AVG(load) AS \"House load\"\nFROM b WHERE load IS NOT NULL\nGROUP BY 1\nORDER BY 1"
+        }
+      ],
+      "options": {
+        "xField": "hour",
+        "orientation": "vertical",
+        "showValue": "never",
+        "stacking": "none",
+        "groupWidth": 0.75,
+        "barWidth": 0.9,
+        "xTickLabelRotation": 0,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt",
+          "decimals": 0,
+          "custom": {
+            "fillOpacity": 75,
+            "lineWidth": 1
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "House load"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#4B7FD6"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "timeFrom": "30d"
+    },
+    {
+      "type": "text",
+      "id": 11,
+      "title": "Not yet metered",
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 14,
+        "y": 22
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Everything inside **House** is one number today. These get their own slices as collectors are added:\n\n- Tesla (collector exists, needs credentials)\n- LG dryer\n- Bosch dishwashers (2)\n- Navien heat pump water heater\n\nUntil then, the histogram and the typical-day chart are the best view of what the big loads are doing."
+      }
+    }
+  ]
+}

@@ -6,7 +6,10 @@
   "editable": false,
   "schemaVersion": 39,
   "refresh": "10s",
-  "time": { "from": "now-3h", "to": "now" },
+  "time": { "from": "now-24h", "to": "now" },
+  "links": [
+    { "type": "dashboards", "tags": ["homepower"], "title": "Home power", "asDropdown": false, "includeVars": false, "keepTime": true, "icon": "external link" }
+  ],
   "templating": {
     "list": [
       {

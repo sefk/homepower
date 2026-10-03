@@ -66,8 +66,8 @@ listed with the question it answers. Highlights:
   the session past 9pm would have cost instead
 
 A Grafana instance on **http://localhost:3425/** serves live dashboards off
-the same SQLite database, read-only — Live Power (10s refresh), Data Health,
-and Energy. It's config-as-code in `ops/grafana/`; install and operation are
+the same SQLite database, read-only — Sources, Sinks, Sources and Sinks,
+Live Power (10s refresh), Energy, and Data Health. It's config-as-code in `ops/grafana/`; install and operation are
 in [ops/README.md][ops].
 
 The Eagle 3 pushes to `POST /ingest/eagle/`; see [ops/README.md][ops]
