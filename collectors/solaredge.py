@@ -14,7 +14,7 @@ smoothed (PRD: mixed resolution is permanent).
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import aiohttp
 from django.utils import timezone
@@ -31,7 +31,7 @@ RESOLUTION_S = 900
 
 class SolarEdgeCollector(Collector):
     slug = "solaredge"
-    name = "Main solar (SolarEdge cloud)"
+    name = "Main House Solar"
     kind = Source.Kind.SOLAR
     poll_interval_s = RESOLUTION_S
     native_resolution_s = RESOLUTION_S
@@ -59,25 +59,47 @@ class SolarEdgeCollector(Collector):
         yesterday so its last quarters get their final values too.
         """
         now = timezone.localtime()
+        async with self._session_factory() as session:
+            return await self.fetch_power(
+                session, (now - timedelta(hours=1)).date(), now.date(), now=now
+            )
+
+    async def fetch_power(
+        self, session, start: date, end: date, now: datetime | None = None
+    ) -> list[Reading]:
+        """Quarter-hour production for the days start..end inclusive.
+
+        Also the backfill path. The portal rejects ranges somewhere
+        between 7 and 30 days long; callers chunk.
+        """
         params = {
-            "start-date": (now - timedelta(hours=1)).date().isoformat(),
-            "end-date": now.date().isoformat(),
+            "start-date": start.isoformat(),
+            "end-date": end.isoformat(),
             "chart-time-unit": "quarter-hours",
             "measurement-types": "production",
         }
         url = f"{MONITORING_BASE}/services/dashboard/power/sites/{self.site_id}"
+        payload = await self._get_json(session, url, params)
+        return self.parse_power(payload, now=now)
+
+    async def installation_date(self, session) -> date:
+        """The site's first day — where history starts."""
+        url = f"{MONITORING_BASE}/services/layout/information/site/{self.site_id}"
+        payload = await self._get_json(session, url, None)
+        return date.fromisoformat(payload["installationDate"])
+
+    async def _get_json(self, session, url, params) -> dict:
         timeout = aiohttp.ClientTimeout(total=30)
-        async with self._session_factory() as session:
-            token = await self.auth.access_token(session)
+        token = await self.auth.access_token(session)
+        status, payload = await self._get(session, url, params, token, timeout)
+        if status == 401:
+            # Token revoked before its expiry; renew once and retry.
+            logger.info("solaredge token rejected, re-authenticating")
+            token = await self.auth.access_token(session, force=True)
             status, payload = await self._get(session, url, params, token, timeout)
-            if status == 401:
-                # Token revoked before its expiry; renew once and retry.
-                logger.info("solaredge token rejected, re-authenticating")
-                token = await self.auth.access_token(session, force=True)
-                status, payload = await self._get(session, url, params, token, timeout)
         if status != 200:
             raise RuntimeError(f"solaredge API HTTP {status}")
-        return self.parse_power(payload, now=now)
+        return payload
 
     async def _get(self, session, url, params, token, timeout):
         headers = {

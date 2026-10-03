@@ -75,6 +75,17 @@ for configuring its uploader. Historical grid data imports from PG&E
 Green Button CSVs via `manage.py import_greenbutton` (backfilled
 coverage; see ops/README.md).
 
+Solar history comes from the vendor clouds: `manage.py backfill` walks
+SolarEdge (15-min, back to the 2015 install) and Enphase Enlighten
+(15-min, back to the ADU array's first day) and stores it as
+`backfilled` coverage. It is idempotent and never overwrites intervals
+the collectors saw live, so it is also how downtime gets healed:
+
+```sh
+uv run python manage.py backfill                      # everything, all history
+uv run python manage.py backfill envoy --start 2026-09-01 --end 2026-09-07
+```
+
 For boot-time operation under `launchd`, see [ops/README.md][ops].
 
 ## Layout
