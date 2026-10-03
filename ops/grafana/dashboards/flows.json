@@ -31,6 +31,52 @@
   },
   "panels": [
     {
+      "type": "netsage-sankey-panel",
+      "title": "Where the energy went — kWh over the range",
+      "description": "Energy flow over the dashboard range, in kWh. Solar that PG&E exported is split between the two arrays in proportion to what each produced that quarter-hour. Only quarter-hours where house load can be derived are counted; unknown stretches are left out, not zero.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(($__from / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         MAX(CASE WHEN slug = 'eagle' THEN w END) AS grid\n  FROM raw\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND COALESCE(main, 0) + COALESCE(guest, 0) + grid >= 0\n              THEN COALESCE(main, 0) + COALESCE(guest, 0) + grid END AS load\n  FROM p\n)\n, f AS (\n  SELECT COALESCE(main, 0) AS m, COALESCE(guest, 0) AS g, solar,\n         MAX(-grid, 0) AS exp, MAX(grid, 0) AS imp\n  FROM b WHERE load IS NOT NULL\n)\nSELECT source, target, ROUND(kwh, 3) AS kwh FROM (\n  SELECT 'Main House Solar' AS source, 'House' AS target,\n         SUM(m - CASE WHEN solar > 0 THEN exp * m / solar ELSE 0 END) * 900 / 3600.0 / 1000.0 AS kwh FROM f\n  UNION ALL\n  SELECT 'Guest House Solar', 'House',\n         SUM(g - CASE WHEN solar > 0 THEN exp * g / solar ELSE 0 END) * 900 / 3600.0 / 1000.0 FROM f\n  UNION ALL\n  SELECT 'Main House Solar', 'Exported to PG&E',\n         SUM(CASE WHEN solar > 0 THEN exp * m / solar ELSE 0 END) * 900 / 3600.0 / 1000.0 FROM f\n  UNION ALL\n  SELECT 'Guest House Solar', 'Exported to PG&E',\n         SUM(CASE WHEN solar > 0 THEN exp * g / solar ELSE 0 END) * 900 / 3600.0 / 1000.0 FROM f\n  UNION ALL\n  SELECT 'PG&E Grid', 'House', SUM(imp) * 900 / 3600.0 / 1000.0 FROM f\n) WHERE kwh > 0",
+          "queryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(($__from / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         MAX(CASE WHEN slug = 'eagle' THEN w END) AS grid\n  FROM raw\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND COALESCE(main, 0) + COALESCE(guest, 0) + grid >= 0\n              THEN COALESCE(main, 0) + COALESCE(guest, 0) + grid END AS load\n  FROM p\n)\n, f AS (\n  SELECT COALESCE(main, 0) AS m, COALESCE(guest, 0) AS g, solar,\n         MAX(-grid, 0) AS exp, MAX(grid, 0) AS imp\n  FROM b WHERE load IS NOT NULL\n)\nSELECT source, target, ROUND(kwh, 3) AS kwh FROM (\n  SELECT 'Main House Solar' AS source, 'House' AS target,\n         SUM(m - CASE WHEN solar > 0 THEN exp * m / solar ELSE 0 END) * 900 / 3600.0 / 1000.0 AS kwh FROM f\n  UNION ALL\n  SELECT 'Guest House Solar', 'House',\n         SUM(g - CASE WHEN solar > 0 THEN exp * g / solar ELSE 0 END) * 900 / 3600.0 / 1000.0 FROM f\n  UNION ALL\n  SELECT 'Main House Solar', 'Exported to PG&E',\n         SUM(CASE WHEN solar > 0 THEN exp * m / solar ELSE 0 END) * 900 / 3600.0 / 1000.0 FROM f\n  UNION ALL\n  SELECT 'Guest House Solar', 'Exported to PG&E',\n         SUM(CASE WHEN solar > 0 THEN exp * g / solar ELSE 0 END) * 900 / 3600.0 / 1000.0 FROM f\n  UNION ALL\n  SELECT 'PG&E Grid', 'House', SUM(imp) * 900 / 3600.0 / 1000.0 FROM f\n) WHERE kwh > 0"
+        }
+      ],
+      "options": {
+        "nodeWidth": 30,
+        "nodePadding": 20,
+        "iteration": 32,
+        "nodeColor": "#4B7FD6",
+        "linkOpacity": 0.45,
+        "labelSize": 14,
+        "valueDecimals": 1,
+        "valueUnits": "kWh"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatth",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "id": 11,
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
       "type": "stat",
       "id": 1,
       "title": "Solar → House",
@@ -39,7 +85,7 @@
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 0
+        "y": 10
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -92,7 +138,7 @@
         "h": 4,
         "w": 4,
         "x": 4,
-        "y": 0
+        "y": 10
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -145,7 +191,7 @@
         "h": 4,
         "w": 4,
         "x": 8,
-        "y": 0
+        "y": 10
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -198,7 +244,7 @@
         "h": 4,
         "w": 4,
         "x": 12,
-        "y": 0
+        "y": 10
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -268,7 +314,7 @@
         "h": 4,
         "w": 4,
         "x": 16,
-        "y": 0
+        "y": 10
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -338,7 +384,7 @@
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 0
+        "y": 10
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -391,7 +437,7 @@
         "h": 11,
         "w": 24,
         "x": 0,
-        "y": 4
+        "y": 14
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -566,7 +612,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 15
+        "y": 25
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -679,7 +725,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 15
+        "y": 25
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -792,7 +838,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 23
+        "y": 33
       },
       "datasource": {
         "type": "frser-sqlite-datasource",

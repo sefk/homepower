@@ -50,6 +50,20 @@ cp ops/com.sefk.grafana.plist ~/Library/LaunchAgents/
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.sefk.grafana.plist
 ```
 
+The two panel plugins (a [Sankey][sankey] and an [hourly heatmap][heatmap])
+and the datasource plugin are declared once, in `grafana.ini`
+(`[plugins] preinstall_sync`), so a fresh install fetches them on first start
+and the `plugins install` above is only a way to do it ahead of time. To add
+them to an existing install without a restart-time download:
+
+```sh
+for p in netsage-sankey-panel marcusolsson-hourly-heatmap-panel; do
+  grafana cli --homepath /opt/homebrew/opt/grafana/share/grafana \
+    --pluginsDir "$PWD/var/grafana/plugins" plugins install $p
+done
+launchctl kickstart -k gui/$(id -u)/com.sefk.grafana   # plugins load at start
+```
+
 Same launchctl verbs as the app (`kickstart -k` to restart, `bootout` to
 stop). Don't also run `brew services start grafana` — Homebrew's service
 hardcodes `/opt/homebrew/etc/grafana.ini` and would fight this one for the
@@ -59,7 +73,7 @@ Everything is config-as-code under `ops/grafana/`:
 
 | Path | What |
 | --- | --- |
-| `grafana.ini` | port, anonymous LAN read access, paths into `var/grafana/` |
+| `grafana.ini` | port, anonymous LAN read access, paths into `var/grafana/`, plugin list |
 | `provisioning/datasources/` | the SQLite datasource, pinned to `db.sqlite3` |
 | `provisioning/dashboards/` | points Grafana at the dashboard directory |
 | `dashboards/*.json` | the dashboards themselves |
@@ -74,11 +88,12 @@ state Grafana owns and git doesn't.
   and stacked over time; per-kW array comparison; monthly and yearly
   production over all backfilled history
 - **Sinks** — where it goes: house load (derived as solar + grid) and
-  export, the always-on floor, the 4–9pm share, a load histogram and a
-  typical-day profile. Appliances and the car get slices here as their
+  export, the always-on floor, the 4–9pm share, a load histogram, a
+  typical-day profile and an hour-by-day heatmap of house load. Appliances and the car get slices here as their
   collectors arrive
 - **Sources and Sinks** — the two together: solar→house, solar→grid and
-  grid→house energy, self-sufficiency and self-use, a mirrored balance
+  grid→house energy, self-sufficiency and self-use, an energy-flow Sankey
+  (kWh from each array and the grid to the house and back out), a mirrored balance
   chart, daily balance and a time-of-use cost estimate
 - **Live Power** (also the home dashboard) — solar vs. grid at native
   resolution, 10s refresh, today's kWh
@@ -187,3 +202,6 @@ upsert on (series, timestamp).
   coverage model in the PRD.
 - Secrets live in `.env` (see top-level README); the launchd job reads
   nothing secret from the plist.
+
+[sankey]: https://grafana.com/grafana/plugins/netsage-sankey-panel/
+[heatmap]: https://grafana.com/grafana/plugins/marcusolsson-hourly-heatmap-panel/

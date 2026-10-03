@@ -441,6 +441,60 @@
       }
     },
     {
+      "type": "marcusolsson-hourly-heatmap-panel",
+      "id": 12,
+      "title": "House load by hour and day — average kW",
+      "description": "Average house load in each hour of each day, last 30 days. Hours with no derivable load are blank, not zero. Rows are hour of day, columns are days.",
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [
+            "time"
+          ],
+          "rawQueryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(($__from / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         MAX(CASE WHEN slug = 'eagle' THEN w END) AS grid\n  FROM raw\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND COALESCE(main, 0) + COALESCE(guest, 0) + grid >= 0\n              THEN COALESCE(main, 0) + COALESCE(guest, 0) + grid END AS load\n  FROM p\n)\nSELECT (t / 3600) * 3600 AS time, AVG(load) / 1000.0 AS \"House load\"\nFROM b WHERE load IS NOT NULL\nGROUP BY 1\nORDER BY 1",
+          "queryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(($__from / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         MAX(CASE WHEN slug = 'eagle' THEN w END) AS grid\n  FROM raw\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND COALESCE(main, 0) + COALESCE(guest, 0) + grid >= 0\n              THEN COALESCE(main, 0) + COALESCE(guest, 0) + grid END AS load\n  FROM p\n)\nSELECT (t / 3600) * 3600 AS time, AVG(load) / 1000.0 AS \"House load\"\nFROM b WHERE load IS NOT NULL\nGROUP BY 1\nORDER BY 1"
+        }
+      ],
+      "options": {
+        "calculation": "mean",
+        "groupBy": 60,
+        "timeFieldName": "time",
+        "valueFieldName": "House load",
+        "showLegend": true,
+        "showTooltip": true,
+        "showCellBorder": false
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kW",
+          "decimals": 2,
+          "custom": {
+            "colorPalette": "interpolateYlOrRd",
+            "colorSpace": "rgb",
+            "invertPalette": true,
+            "nullValueColor": "rgba(0,0,0,0)"
+          }
+        },
+        "overrides": []
+      },
+      "timeFrom": "30d"
+    },
+    {
       "type": "timeseries",
       "id": 8,
       "title": "Daily use — peak window vs. the rest",
@@ -449,7 +503,7 @@
         "h": 8,
         "w": 14,
         "x": 0,
-        "y": 14
+        "y": 25
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -562,7 +616,7 @@
         "h": 8,
         "w": 10,
         "x": 14,
-        "y": 14
+        "y": 25
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -621,7 +675,7 @@
         "h": 8,
         "w": 14,
         "x": 0,
-        "y": 22
+        "y": 33
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -696,7 +750,7 @@
         "h": 8,
         "w": 10,
         "x": 14,
-        "y": 22
+        "y": 33
       },
       "options": {
         "mode": "markdown",
