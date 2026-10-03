@@ -1,51 +1,66 @@
 {
   "uid": "homepower-live",
   "title": "Live Power",
-  "tags": ["homepower"],
+  "tags": [
+    "homepower"
+  ],
   "timezone": "browser",
   "editable": false,
   "schemaVersion": 39,
   "refresh": "10s",
-  "time": { "from": "now-24h", "to": "now" },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
   "links": [
-    { "type": "dashboards", "tags": ["homepower"], "title": "Home power", "asDropdown": false, "includeVars": false, "keepTime": true, "icon": "external link" }
+    {
+      "type": "dashboards",
+      "tags": [
+        "homepower"
+      ],
+      "title": "Home power",
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": true,
+      "icon": "external link"
+    }
   ],
   "templating": {
     "list": [
       {
-        "name": "solar",
-        "label": "Solar series",
-        "type": "query",
-        "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
-        "query": "SELECT so.slug || '/' || se.metric FROM core_series se JOIN core_source so ON so.id = se.source_id WHERE so.kind = 'solar' AND se.unit = 'W' ORDER BY 1",
-        "refresh": 1,
-        "multi": false,
-        "includeAll": false,
-        "current": { "text": "envoy/production_w", "value": "envoy/production_w" },
-        "options": []
-      },
-      {
         "name": "grid",
         "label": "Grid series",
         "type": "query",
-        "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "homepower-sqlite"
+        },
         "query": "SELECT so.slug || '/' || se.metric FROM core_series se JOIN core_source so ON so.id = se.source_id WHERE so.kind = 'grid' AND se.unit = 'W' ORDER BY 1",
         "refresh": 1,
         "multi": false,
         "includeAll": false,
-        "current": { "text": "eagle/demand_w", "value": "eagle/demand_w" },
+        "current": {
+          "text": "eagle/demand_w",
+          "value": "eagle/demand_w"
+        },
         "options": []
       },
       {
         "name": "series",
         "label": "All series",
         "type": "query",
-        "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "homepower-sqlite"
+        },
         "query": "SELECT so.slug || '/' || se.metric FROM core_series se JOIN core_source so ON so.id = se.source_id ORDER BY so.kind, 1",
         "refresh": 1,
         "multi": true,
         "includeAll": true,
-        "current": { "text": "All", "value": "$__all" },
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
         "options": []
       }
     ]
@@ -56,20 +71,37 @@
       "id": 1,
       "title": "Solar now",
       "description": "Latest production sample, only if it arrived in the last 10 minutes. Blank means unknown, never zero.",
-      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
-      "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
           "queryType": "table",
           "timeColumns": [],
-          "rawQueryText": "SELECT s.value AS \"Solar now\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug || '/' || se.metric = '$solar'\n  AND s.ts >= datetime('now', '-10 minutes')\nORDER BY s.ts DESC\nLIMIT 1",
-          "queryText": "SELECT s.value AS \"Solar now\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug || '/' || se.metric = '$solar'\n  AND s.ts >= datetime('now', '-10 minutes')\nORDER BY s.ts DESC\nLIMIT 1"
+          "queryText": "SELECT CASE WHEN m IS NULL AND e IS NULL THEN NULL\n            ELSE COALESCE(m, 0) + COALESCE(e, 0) END AS \"Solar now\"\nFROM (SELECT (SELECT s.value FROM core_sample s\n     JOIN core_series se ON se.id = s.series_id\n     JOIN core_source so ON so.id = se.source_id\n    WHERE so.slug = 'solaredge' AND se.metric = 'production_w'\n      AND s.ts >= datetime('now', '-45 minutes')\n    ORDER BY s.ts DESC LIMIT 1) AS m,\n             (SELECT s.value FROM core_sample s\n     JOIN core_series se ON se.id = s.series_id\n     JOIN core_source so ON so.id = se.source_id\n    WHERE so.slug = 'envoy' AND se.metric = 'production_w'\n      AND s.ts >= datetime('now', '-10 minutes')\n    ORDER BY s.ts DESC LIMIT 1) AS e)",
+          "rawQueryText": "SELECT CASE WHEN m IS NULL AND e IS NULL THEN NULL\n            ELSE COALESCE(m, 0) + COALESCE(e, 0) END AS \"Solar now\"\nFROM (SELECT (SELECT s.value FROM core_sample s\n     JOIN core_series se ON se.id = s.series_id\n     JOIN core_source so ON so.id = se.source_id\n    WHERE so.slug = 'solaredge' AND se.metric = 'production_w'\n      AND s.ts >= datetime('now', '-45 minutes')\n    ORDER BY s.ts DESC LIMIT 1) AS m,\n             (SELECT s.value FROM core_sample s\n     JOIN core_series se ON se.id = s.series_id\n     JOIN core_source so ON so.id = se.source_id\n    WHERE so.slug = 'envoy' AND se.metric = 'production_w'\n      AND s.ts >= datetime('now', '-10 minutes')\n    ORDER BY s.ts DESC LIMIT 1) AS e)"
         }
       ],
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "colorMode": "value",
         "graphMode": "none",
         "textMode": "auto"
@@ -78,7 +110,10 @@
         "defaults": {
           "unit": "watt",
           "decimals": 0,
-          "color": { "mode": "fixed", "fixedColor": "#E5A23C" },
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#E5A23C"
+          },
           "noValue": "unknown"
         },
         "overrides": []
@@ -89,12 +124,23 @@
       "id": 2,
       "title": "Grid now",
       "description": "Latest whole-home demand. Positive is import from PG&E, negative is export. Blank if nothing arrived in 10 minutes.",
-      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
-      "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
           "queryType": "table",
           "timeColumns": [],
           "rawQueryText": "SELECT s.value AS \"Grid now\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug || '/' || se.metric = '$grid'\n  AND s.ts >= datetime('now', '-10 minutes')\nORDER BY s.ts DESC\nLIMIT 1",
@@ -102,7 +148,13 @@
         }
       ],
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "colorMode": "value",
         "graphMode": "none",
         "textMode": "auto"
@@ -112,12 +164,20 @@
           "unit": "watt",
           "decimals": 0,
           "noValue": "unknown",
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "#2E8B7F", "value": null },
-              { "color": "#C4463A", "value": 0 }
+              {
+                "color": "#2E8B7F",
+                "value": null
+              },
+              {
+                "color": "#C4463A",
+                "value": 0
+              }
             ]
           }
         },
@@ -127,22 +187,39 @@
     {
       "type": "stat",
       "id": 3,
-      "title": "House load (est.)",
+      "title": "House load now",
       "description": "Solar production + grid demand, from each source's most recent sample. An estimate: the two meters report at different rates (60s vs ~8s), so the two readings are near-simultaneous, not simultaneous. Blank unless both are fresh.",
-      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
-      "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
           "queryType": "table",
           "timeColumns": [],
-          "rawQueryText": "SELECT\n  (SELECT s.value FROM core_sample s\n     JOIN core_series se ON se.id = s.series_id\n     JOIN core_source so ON so.id = se.source_id\n    WHERE so.slug || '/' || se.metric = '$solar'\n      AND s.ts >= datetime('now', '-10 minutes')\n    ORDER BY s.ts DESC LIMIT 1)\n  +\n  (SELECT s.value FROM core_sample s\n     JOIN core_series se ON se.id = s.series_id\n     JOIN core_source so ON so.id = se.source_id\n    WHERE so.slug || '/' || se.metric = '$grid'\n      AND s.ts >= datetime('now', '-10 minutes')\n    ORDER BY s.ts DESC LIMIT 1)\n  AS \"House load\"",
-          "queryText": "SELECT\n  (SELECT s.value FROM core_sample s\n     JOIN core_series se ON se.id = s.series_id\n     JOIN core_source so ON so.id = se.source_id\n    WHERE so.slug || '/' || se.metric = '$solar'\n      AND s.ts >= datetime('now', '-10 minutes')\n    ORDER BY s.ts DESC LIMIT 1)\n  +\n  (SELECT s.value FROM core_sample s\n     JOIN core_series se ON se.id = s.series_id\n     JOIN core_source so ON so.id = se.source_id\n    WHERE so.slug || '/' || se.metric = '$grid'\n      AND s.ts >= datetime('now', '-10 minutes')\n    ORDER BY s.ts DESC LIMIT 1)\n  AS \"House load\""
+          "queryText": "SELECT g.v + COALESCE(m.v, 0) + COALESCE(e.v, 0) AS v\nFROM (SELECT s.value AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'eagle' AND se.metric IN ('production_w', 'demand_w')\n  AND s.ts >= datetime('now', '-10 minutes')\nORDER BY s.ts DESC\nLIMIT 1) g\nLEFT JOIN (SELECT s.value AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'solaredge' AND se.metric IN ('production_w', 'demand_w')\n  AND s.ts >= datetime('now', '-45 minutes')\nORDER BY s.ts DESC\nLIMIT 1) m ON 1\nLEFT JOIN (SELECT s.value AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'envoy' AND se.metric IN ('production_w', 'demand_w')\n  AND s.ts >= datetime('now', '-10 minutes')\nORDER BY s.ts DESC\nLIMIT 1) e ON 1",
+          "rawQueryText": "SELECT g.v + COALESCE(m.v, 0) + COALESCE(e.v, 0) AS v\nFROM (SELECT s.value AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'eagle' AND se.metric IN ('production_w', 'demand_w')\n  AND s.ts >= datetime('now', '-10 minutes')\nORDER BY s.ts DESC\nLIMIT 1) g\nLEFT JOIN (SELECT s.value AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'solaredge' AND se.metric IN ('production_w', 'demand_w')\n  AND s.ts >= datetime('now', '-45 minutes')\nORDER BY s.ts DESC\nLIMIT 1) m ON 1\nLEFT JOIN (SELECT s.value AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'envoy' AND se.metric IN ('production_w', 'demand_w')\n  AND s.ts >= datetime('now', '-10 minutes')\nORDER BY s.ts DESC\nLIMIT 1) e ON 1"
         }
       ],
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "colorMode": "value",
         "graphMode": "none",
         "textMode": "auto"
@@ -152,7 +229,10 @@
           "unit": "watt",
           "decimals": 0,
           "noValue": "unknown",
-          "color": { "mode": "fixed", "fixedColor": "#8E8E93" }
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#8E8E93"
+          }
         },
         "overrides": []
       }
@@ -162,20 +242,37 @@
       "id": 4,
       "title": "Solar today",
       "description": "Energy since local midnight, integrated from each sample's value x duration. Only observed time counts — a collector outage lowers this number rather than filling it in.",
-      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
-      "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
           "queryType": "table",
           "timeColumns": [],
-          "rawQueryText": "SELECT SUM(s.value * s.duration_s) / 3600000.0 AS \"Solar today\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug || '/' || se.metric = '$solar'\n  AND s.ts >= datetime(datetime('now', 'localtime', 'start of day'), 'utc')",
-          "queryText": "SELECT SUM(s.value * s.duration_s) / 3600000.0 AS \"Solar today\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug || '/' || se.metric = '$solar'\n  AND s.ts >= datetime(datetime('now', 'localtime', 'start of day'), 'utc')"
+          "queryText": "SELECT SUM(s.value * s.duration_s) / 3600000.0 AS \"Solar today\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug IN ('solaredge', 'envoy') AND se.metric = 'production_w'\n  AND s.ts >= datetime(datetime('now', 'localtime', 'start of day'), 'utc')",
+          "rawQueryText": "SELECT SUM(s.value * s.duration_s) / 3600000.0 AS \"Solar today\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug IN ('solaredge', 'envoy') AND se.metric = 'production_w'\n  AND s.ts >= datetime(datetime('now', 'localtime', 'start of day'), 'utc')"
         }
       ],
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "colorMode": "value",
         "graphMode": "none",
         "textMode": "auto"
@@ -185,7 +282,10 @@
           "unit": "kwatth",
           "decimals": 1,
           "noValue": "unknown",
-          "color": { "mode": "fixed", "fixedColor": "#E5A23C" }
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#E5A23C"
+          }
         },
         "overrides": []
       }
@@ -195,12 +295,23 @@
       "id": 5,
       "title": "Imported today",
       "description": "Grid energy drawn since local midnight (positive demand only).",
-      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
-      "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
           "queryType": "table",
           "timeColumns": [],
           "rawQueryText": "SELECT SUM(CASE WHEN s.value > 0 THEN s.value * s.duration_s ELSE 0 END) / 3600000.0 AS \"Imported today\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug || '/' || se.metric = '$grid'\n  AND s.ts >= datetime(datetime('now', 'localtime', 'start of day'), 'utc')",
@@ -208,7 +319,13 @@
         }
       ],
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "colorMode": "value",
         "graphMode": "none",
         "textMode": "auto"
@@ -218,7 +335,10 @@
           "unit": "kwatth",
           "decimals": 1,
           "noValue": "unknown",
-          "color": { "mode": "fixed", "fixedColor": "#C4463A" }
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#C4463A"
+          }
         },
         "overrides": []
       }
@@ -228,12 +348,23 @@
       "id": 6,
       "title": "Exported today",
       "description": "Grid energy pushed back since local midnight (negative demand only).",
-      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
-      "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
           "queryType": "table",
           "timeColumns": [],
           "rawQueryText": "SELECT SUM(CASE WHEN s.value < 0 THEN -s.value * s.duration_s ELSE 0 END) / 3600000.0 AS \"Exported today\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug || '/' || se.metric = '$grid'\n  AND s.ts >= datetime(datetime('now', 'localtime', 'start of day'), 'utc')",
@@ -241,7 +372,13 @@
         }
       ],
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "colorMode": "value",
         "graphMode": "none",
         "textMode": "auto"
@@ -251,7 +388,10 @@
           "unit": "kwatth",
           "decimals": 1,
           "noValue": "unknown",
-          "color": { "mode": "fixed", "fixedColor": "#2E8B7F" }
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#2E8B7F"
+          }
         },
         "overrides": []
       }
@@ -261,29 +401,68 @@
       "id": 10,
       "title": "Power — solar production vs. grid demand",
       "description": "Both series are watts, so they share one axis. Every point is a stored sample; nothing is interpolated. A break in a line is a real gap in the data, not zero output.",
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 4 },
-      "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
       "targets": [
         {
-          "refId": "A",
-          "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
           "queryType": "time series",
-          "timeColumns": ["time"],
-          "rawQueryText": "SELECT CAST(strftime('%s', s.ts) AS INTEGER) AS time,\n       s.value AS \"Solar production\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug || '/' || se.metric = '$solar'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')\nORDER BY s.ts",
-          "queryText": "SELECT CAST(strftime('%s', s.ts) AS INTEGER) AS time,\n       s.value AS \"Solar production\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug || '/' || se.metric = '$solar'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')\nORDER BY s.ts"
+          "timeColumns": [
+            "time"
+          ],
+          "refId": "A",
+          "queryText": "SELECT CAST(strftime('%s', s.ts) AS INTEGER) AS time,\n       s.value AS \"Main House Solar\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'solaredge' AND se.metric = 'production_w'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')\nORDER BY s.ts",
+          "rawQueryText": "SELECT CAST(strftime('%s', s.ts) AS INTEGER) AS time,\n       s.value AS \"Main House Solar\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'solaredge' AND se.metric = 'production_w'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')\nORDER BY s.ts"
+        },
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "time series",
+          "timeColumns": [
+            "time"
+          ],
+          "refId": "C",
+          "queryText": "SELECT CAST(strftime('%s', s.ts) AS INTEGER) AS time,\n       s.value AS \"Guest House Solar\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'envoy' AND se.metric = 'production_w'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')\nORDER BY s.ts",
+          "rawQueryText": "SELECT CAST(strftime('%s', s.ts) AS INTEGER) AS time,\n       s.value AS \"Guest House Solar\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'envoy' AND se.metric = 'production_w'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')\nORDER BY s.ts"
         },
         {
           "refId": "B",
-          "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
           "queryType": "time series",
-          "timeColumns": ["time"],
+          "timeColumns": [
+            "time"
+          ],
           "rawQueryText": "SELECT CAST(strftime('%s', s.ts) AS INTEGER) AS time,\n       s.value AS \"Grid demand\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug || '/' || se.metric = '$grid'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')\nORDER BY s.ts",
           "queryText": "SELECT CAST(strftime('%s', s.ts) AS INTEGER) AS time,\n       s.value AS \"Grid demand\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug || '/' || se.metric = '$grid'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')\nORDER BY s.ts"
         }
       ],
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": [] },
-        "tooltip": { "mode": "multi", "sort": "none" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -302,17 +481,60 @@
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "Solar production" },
+            "matcher": {
+              "id": "byName",
+              "options": "Main House Solar"
+            },
             "properties": [
-              { "id": "color", "value": { "mode": "fixed", "fixedColor": "#E5A23C" } },
-              { "id": "custom.insertNulls", "value": 180000 }
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E5A23C"
+                }
+              },
+              {
+                "id": "custom.insertNulls",
+                "value": 1200000
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "Grid demand" },
+            "matcher": {
+              "id": "byName",
+              "options": "Guest House Solar"
+            },
             "properties": [
-              { "id": "color", "value": { "mode": "fixed", "fixedColor": "#4B7FD6" } },
-              { "id": "custom.insertNulls", "value": 120000 }
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F2CC0C"
+                }
+              },
+              {
+                "id": "custom.insertNulls",
+                "value": 180000
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Grid demand"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#4B7FD6"
+                }
+              },
+              {
+                "id": "custom.insertNulls",
+                "value": 120000
+              }
             ]
           }
         ]
@@ -323,32 +545,61 @@
       "id": 11,
       "title": "Grid import / export",
       "description": "The same grid series, coloured by polarity: warm above zero is energy bought, cool below zero is energy sent back.",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 14 },
-      "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
           "queryType": "time series",
-          "timeColumns": ["time"],
+          "timeColumns": [
+            "time"
+          ],
           "rawQueryText": "SELECT CAST(strftime('%s', s.ts) AS INTEGER) AS time,\n       s.value AS \"Grid demand\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug || '/' || se.metric = '$grid'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')\nORDER BY s.ts",
           "queryText": "SELECT CAST(strftime('%s', s.ts) AS INTEGER) AS time,\n       s.value AS \"Grid demand\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug || '/' || se.metric = '$grid'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')\nORDER BY s.ts"
         }
       ],
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false, "calcs": [] },
-        "tooltip": { "mode": "single", "sort": "none" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
       },
       "fieldConfig": {
         "defaults": {
           "unit": "watt",
           "decimals": 0,
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "#2E8B7F", "value": null },
-              { "color": "#C4463A", "value": 0 }
+              {
+                "color": "#2E8B7F",
+                "value": null
+              },
+              {
+                "color": "#C4463A",
+                "value": 0
+              }
             ]
           },
           "custom": {
@@ -360,7 +611,9 @@
             "insertNulls": 120000,
             "axisCenteredZero": true,
             "gradientMode": "scheme",
-            "thresholdsStyle": { "mode": "off" }
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           }
         },
         "overrides": []
@@ -374,26 +627,50 @@
       "repeat": "series",
       "repeatDirection": "h",
       "maxPerRow": 2,
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 22 },
-      "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 22
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "frser-sqlite-datasource", "uid": "homepower-sqlite" },
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
           "queryType": "time series",
-          "timeColumns": ["time"],
+          "timeColumns": [
+            "time"
+          ],
           "rawQueryText": "SELECT CAST(strftime('%s', s.ts) AS INTEGER) AS time,\n       s.value AS \"$series\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug || '/' || se.metric = '$series'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')\nORDER BY s.ts",
           "queryText": "SELECT CAST(strftime('%s', s.ts) AS INTEGER) AS time,\n       s.value AS \"$series\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug || '/' || se.metric = '$series'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')\nORDER BY s.ts"
         }
       ],
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false, "calcs": [] },
-        "tooltip": { "mode": "single", "sort": "none" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
       },
       "fieldConfig": {
         "defaults": {
           "decimals": 0,
-          "color": { "mode": "fixed", "fixedColor": "#7C8CA8" },
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7C8CA8"
+          },
           "custom": {
             "drawStyle": "line",
             "lineWidth": 2,
