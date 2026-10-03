@@ -10,6 +10,7 @@ from django.conf import settings
 from .base import Collector
 from .envoy import EnvoyCollector
 from .solaredge import SolarEdgeCollector
+from .solaredge_auth import SolarEdgeAuth
 from .tesla import TeslaCollector
 
 logger = logging.getLogger(__name__)
@@ -28,15 +29,23 @@ def enabled_collectors() -> list[Collector]:
         )
     else:
         logger.warning("envoy: no Enlighten credentials in .env, collector disabled")
-    if settings.SOLAREDGE_API_KEY and settings.SOLAREDGE_SITE_ID:
+    if (
+        settings.SOLAREDGE_USERNAME
+        and settings.SOLAREDGE_PASSWORD
+        and settings.SOLAREDGE_SITE_ID
+    ):
         collectors.append(
             SolarEdgeCollector(
-                api_key=settings.SOLAREDGE_API_KEY,
+                auth=SolarEdgeAuth(
+                    username=settings.SOLAREDGE_USERNAME,
+                    password=settings.SOLAREDGE_PASSWORD,
+                    token_file=settings.SOLAREDGE_TOKEN_FILE,
+                ),
                 site_id=settings.SOLAREDGE_SITE_ID,
             )
         )
     else:
-        logger.warning("solaredge: no API key in .env, collector disabled")
+        logger.warning("solaredge: no portal login/site id in .env, collector disabled")
     if settings.TESLA_CLIENT_ID and settings.TESLA_REFRESH_TOKEN:
         collectors.append(
             TeslaCollector(

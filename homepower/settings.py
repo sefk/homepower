@@ -102,10 +102,13 @@ ENPHASE_USERNAME = os.environ.get("ENPHASE_USERNAME", "")
 ENPHASE_PASSWORD = os.environ.get("ENPHASE_PASSWORD", "")
 ENPHASE_TOKEN_FILE = VAR_DIR / "enphase_token.json"
 
-# SolarEdge cloud (main solar). Key from monitoring.solaredge.com; leave
-# blank to disable the collector.
-SOLAREDGE_API_KEY = os.environ.get("SOLAREDGE_API_KEY", "")
+# SolarEdge cloud (main solar). The monitoring.solaredge.com portal login
+# (no API key needed) and the site id from the portal URL; leave blank to
+# disable the collector.
+SOLAREDGE_USERNAME = os.environ.get("SOLAREDGE_USERNAME", "")
+SOLAREDGE_PASSWORD = os.environ.get("SOLAREDGE_PASSWORD", "")
 SOLAREDGE_SITE_ID = os.environ.get("SOLAREDGE_SITE_ID", "")
+SOLAREDGE_TOKEN_FILE = VAR_DIR / "solaredge_token.json"
 
 # Tesla Fleet API (EV, Model S). Refresh token minted by `manage.py
 # tesla_auth`; see ops/tesla-setup.md for the developer-app registration

@@ -1,9 +1,12 @@
 """SolarEdge cloud collector — main-house solar at 15-minute resolution.
 
 The SE6000A's bridge is a pure outbound cloud client with no local
-interface (discovery doc), so v1 reads the Monitoring API. Budget: 300
-requests/day; polling powerDetails every 15 minutes uses 96. The source
-layer is built for the eventual local-Modbus swap (PRD assumption).
+interface (discovery doc), so v1 reads the cloud. SolarEdge would not
+issue a Monitoring API key for this site (keys go through the installer
+account), so this reads the SolarEdge ONE portal's own dashboard API
+with the owner's portal login instead — see solaredge_auth. It is an
+unpublished API: expect it to change without notice. The source layer is
+built for the eventual local-Modbus swap (PRD assumption).
 
 The API returns quarter-hour mean power values. Samples are stored at
 that native 900s resolution — the UI renders them stepped, never
@@ -19,10 +22,10 @@ from django.utils import timezone
 from core.models import Source
 
 from .base import Collector, Reading
+from .solaredge_auth import MONITORING_BASE, USER_AGENT
 
 logger = logging.getLogger(__name__)
 
-API_BASE = "https://monitoringapi.solaredge.com"
 RESOLUTION_S = 900
 
 
@@ -40,65 +43,76 @@ class SolarEdgeCollector(Collector):
         # the poller-jitter grace.
         return RESOLUTION_S
 
-    def __init__(self, api_key: str, site_id: str, session_factory=aiohttp.ClientSession):
+    def __init__(self, auth, site_id: str, session_factory=aiohttp.ClientSession):
         super().__init__()
-        self.api_key = api_key
+        self.auth = auth
         self.site_id = site_id
         self._session_factory = session_factory
 
     async def poll(self) -> list[Reading]:
-        """Fetch the last hour of quarter-hour production means.
+        """Fetch today's quarter-hour production means.
 
-        An hour's window means each poll re-reads a few recent quarters:
-        upsert makes that idempotent, and it heals the ragged edge where
-        the API hadn't yet finalized the newest quarter.
+        The API serves whole days, so each poll re-reads the day so far:
+        upsert makes that idempotent, it heals the ragged edge where the
+        newest quarter was still filling in, and it backfills same-day
+        downtime. Just after midnight the window reaches back into
+        yesterday so its last quarters get their final values too.
         """
         now = timezone.localtime()
-        start = now - timedelta(hours=1)
         params = {
-            "api_key": self.api_key,
-            "startTime": start.strftime("%Y-%m-%d %H:%M:%S"),
-            "endTime": now.strftime("%Y-%m-%d %H:%M:%S"),
-            "meters": "Production",
+            "start-date": (now - timedelta(hours=1)).date().isoformat(),
+            "end-date": now.date().isoformat(),
+            "chart-time-unit": "quarter-hours",
+            "measurement-types": "production",
         }
-        url = f"{API_BASE}/site/{self.site_id}/powerDetails"
+        url = f"{MONITORING_BASE}/services/dashboard/power/sites/{self.site_id}"
+        timeout = aiohttp.ClientTimeout(total=30)
         async with self._session_factory() as session:
-            async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=30)) as resp:
-                if resp.status != 200:
-                    raise RuntimeError(f"solaredge API HTTP {resp.status}")
-                payload = await resp.json()
-        return self.parse_power_details(payload)
+            token = await self.auth.access_token(session)
+            status, payload = await self._get(session, url, params, token, timeout)
+            if status == 401:
+                # Token revoked before its expiry; renew once and retry.
+                logger.info("solaredge token rejected, re-authenticating")
+                token = await self.auth.access_token(session, force=True)
+                status, payload = await self._get(session, url, params, token, timeout)
+        if status != 200:
+            raise RuntimeError(f"solaredge API HTTP {status}")
+        return self.parse_power(payload, now=now)
 
-    def parse_power_details(self, payload: dict) -> list[Reading]:
+    async def _get(self, session, url, params, token, timeout):
+        headers = {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}",
+            "User-Agent": USER_AGENT,
+            "Origin": MONITORING_BASE,
+            "Referer": f"{MONITORING_BASE}/",
+        }
+        async with session.get(url, params=params, headers=headers, timeout=timeout) as resp:
+            if resp.status != 200:
+                return resp.status, None
+            return resp.status, await resp.json()
+
+    def parse_power(self, payload: dict, now: datetime | None = None) -> list[Reading]:
         tz = timezone.get_current_timezone()
+        now = now or timezone.now()
         readings = []
-        for meter in payload.get("powerDetails", {}).get("meters", []):
-            if meter.get("type") != "Production":
+        for point in payload.get("measurements", []):
+            # The day is served whole: quarters with no data yet (night,
+            # the future, an outage) carry production null.
+            if point.get("production") is None:
                 continue
-            prev_naive = None
-            fold = 0
-            for point in meter.get("values", []):
-                if "value" not in point:
-                    continue  # API omits value for not-yet-final quarters
-                naive = datetime.strptime(point["date"], "%Y-%m-%d %H:%M:%S")
-                # DST fall-back: the API repeats 01:00-01:45 local. The
-                # response is chronological, so a timestamp <= its
-                # predecessor marks the second (standard-time) pass; from
-                # there on fold=1 keeps repeated wall times distinct
-                # instants instead of silently overwriting the first hour
-                # via the (series, ts) upsert. fold is ignored for
-                # unambiguous times, so leaving it set is harmless.
-                if prev_naive is not None and naive <= prev_naive:
-                    fold = 1
-                prev_naive = naive
-                ts = naive.replace(tzinfo=tz, fold=fold)
-                readings.append(
-                    Reading(
-                        metric="production_w",
-                        unit="W",
-                        ts=ts,  # aware local time; Django stores UTC
-                        duration_s=RESOLUTION_S,
-                        value=float(point["value"]),
-                    )
+            # measurementTime carries its UTC offset, so the repeated
+            # 01:00-01:45 hour on DST fall-back arrives as distinct instants.
+            ts = datetime.fromisoformat(point["measurementTime"]).astimezone(tz)
+            if ts > now:
+                continue
+            readings.append(
+                Reading(
+                    metric="production_w",
+                    unit="W",
+                    ts=ts,  # aware local time; Django stores UTC
+                    duration_s=RESOLUTION_S,
+                    value=float(point["production"]),
                 )
+            )
         return readings
