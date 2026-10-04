@@ -93,7 +93,11 @@ class PgeGasCollector(Collector):
                 raise RuntimeError("no gas account on this PG&E login")
             readings = []
             for account in accounts:
-                reads = await opower.async_get_cost_reads(account, AggregateType.DAY, start, end)
+                # Usage reads, not cost reads: async_get_cost_reads drops
+                # trailing all-zero days as "not posted yet", which erases
+                # real zero-gas days (summer, after the heat pump water
+                # heater). The usage endpoint returns only posted days.
+                reads = await opower.async_get_usage_reads(account, AggregateType.DAY, start, end)
                 readings += [
                     Reading(
                         metric="gas_wh",

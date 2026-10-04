@@ -314,6 +314,20 @@ class Command(BaseCommand):
                     )
                     if (end_naive.minute + 1) % _INCLUSIVE_END_MINUTE_STEP == 0:
                         duration_s += 60
+                if gas:
+                    # Gas rows are always one whole local day, and PG&E's
+                    # END TIME is wrong on DST days (22:59 on the 23-hour
+                    # day, 00:59 on the 25-hour one), so measure midnight
+                    # to midnight instead of trusting it.
+                    next_midnight = datetime.combine(
+                        start_naive.date() + timedelta(days=1), datetime.min.time(), tz
+                    )
+                    duration_s = int(
+                        (
+                            next_midnight.astimezone(dt_timezone.utc)
+                            - ts.astimezone(dt_timezone.utc)
+                        ).total_seconds()
+                    )
             except (ValueError, IndexError):
                 unparseable += 1
                 continue

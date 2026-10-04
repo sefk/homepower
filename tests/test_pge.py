@@ -44,7 +44,7 @@ class FakeOpower:
     async def async_get_accounts(self):
         return FakeOpower.accounts
 
-    async def async_get_cost_reads(self, account, aggregate_type, start, end):
+    async def async_get_usage_reads(self, account, aggregate_type, start, end):
         assert account.meter_type == MeterType.GAS
         return FakeOpower.reads
 
@@ -72,6 +72,17 @@ class TestPoll:
         assert readings[0].duration_s == 86400
         assert readings[0].value == pytest.approx(1.05 * 29307.1)
         assert readings[1].value == 0.0
+
+    def test_trailing_zero_days_are_kept(self, fake_opower, collector, monkeypatch):
+        """A run of zero-gas days at the end of the window is real use
+        (none), not unposted data -- it must come through as 0, not vanish."""
+        monkeypatch.setattr(
+            FakeOpower, "reads", [day(2026, 9, 7, 1.06)] + [day(2026, 9, d, 0.0) for d in range(8, 31)]
+        )
+        readings = asyncio.run(collector.poll())
+        assert len(readings) == 24
+        assert readings[-1].ts == utc(2026, 9, 30, 7, 0)
+        assert readings[-1].value == 0.0
 
     def test_mfa_means_rerun_pge_auth(self, fake_opower, collector):
         fake_opower.mfa = True

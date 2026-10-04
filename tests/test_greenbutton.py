@@ -637,6 +637,20 @@ class TestNaturalGas:
         assert spans.count() == 1
         assert spans.get().end == utc(2025, 11, 4, 8, 0)  # 00:00 PST
 
+    def test_pge_dst_end_times_ignored(self, tmp_path):
+        """PG&E's real DST-day rows: END TIME 22:59 on the 23-hour day and
+        00:59 on the 25-hour day. Each is still the whole local day."""
+        content = (
+            "TYPE,DATE,START TIME,END TIME,USAGE (therms),COST,NOTES\n"
+            "Natural gas usage,2026-03-08,00:00,22:59,0.00,$0.00\n"
+            "Natural gas usage,2025-11-02,00:00,00:59,1.04,$2.90\n"
+        )
+        call_command("import_greenbutton", _write(tmp_path, "gas.csv", content))
+        durations = dict(
+            Sample.objects.filter(series__metric="gas_wh").values_list("ts", "duration_s")
+        )
+        assert durations == {utc(2026, 3, 8, 8, 0): 82800, utc(2025, 11, 2, 7, 0): 90000}
+
     def test_gas_and_electric_files_in_one_run(self, tmp_path):
         call_command(
             "import_greenbutton",
