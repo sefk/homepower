@@ -612,7 +612,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 25
+        "y": 33
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -725,7 +725,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 25
+        "y": 33
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -838,7 +838,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 33
+        "y": 41
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -934,6 +934,819 @@
         ]
       },
       "timeFrom": "30d"
+    },
+    {
+      "type": "timeseries",
+      "id": 12,
+      "title": "Net use — import minus export over the range",
+      "description": "kWh bought from PG&E minus kWh sent back, per bar. Red above zero is net import, green below is net export. Follows the time picker: bars are quarter-hours up to 2 days, hours up to 2 weeks, days up to 4 months and months beyond that. The legend total matches Net from PG&E above.",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "time series",
+          "timeColumns": [
+            "time"
+          ],
+          "rawQueryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(($__from / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), gb AS (\n  -- PG&E's own hourly meter history (Green Button import), spread evenly\n  -- over the hour's quarters. Used only where the Eagle has no reading.\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 + o.off AS t,\n         'pge' AS slug,\n         SUM(CASE WHEN se.metric = 'grid_import_wh' THEN s.value ELSE -s.value END)\n           * 3600.0 / MAX(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN (SELECT 0 AS off UNION ALL SELECT 900 UNION ALL SELECT 1800 UNION ALL SELECT 2700) o\n    ON o.off < s.duration_s\n  WHERE se.metric IN ('grid_import_wh', 'grid_export_wh')\n    AND s.ts >= datetime(($__from / 1000 / 3600) * 3600 - 3600, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY s.ts, o.off\n  HAVING COUNT(*) = 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         COALESCE(MAX(CASE WHEN slug = 'eagle' THEN w END),\n                  MAX(CASE WHEN slug = 'pge' THEN w END)) AS grid,\n         MAX(slug = 'eagle') AS live_grid\n  FROM (SELECT t, slug, w FROM raw\n        UNION ALL\n        SELECT t, slug, w FROM gb\n        WHERE t >= ($__from / 1000 / 900) * 900 AND t < $__to / 1000)\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND sl + grid >= 0\n              THEN sl + grid END AS load\n  FROM (SELECT p.*,\n               -- An hourly PG&E reading pairs with the hour's mean solar;\n               -- per-quarter solar against an hourly grid figure would go\n               -- negative whenever production swung within the hour.\n               CASE WHEN live_grid = 1\n                    THEN COALESCE(main, 0) + COALESCE(guest, 0)\n                    ELSE AVG(COALESCE(main, 0) + COALESCE(guest, 0)) OVER (PARTITION BY t / 3600)\n               END AS sl\n        FROM p)\n), k AS (\n  -- Bar size follows the range: quarter-hours up to 2 days, hours up to\n  -- 2 weeks, local days up to 4 months, local months beyond that.\n  SELECT CASE WHEN $__to - $__from <= 2 * 86400000 THEN 900\n              WHEN $__to - $__from <= 14 * 86400000 THEN 3600\n              WHEN $__to - $__from <= 120 * 86400000 THEN 86400\n              ELSE 0 END AS step\n)\nSELECT CASE k.step\n         WHEN 900 THEN t\n         WHEN 3600 THEN (t / 3600) * 3600\n         WHEN 86400 THEN CAST(strftime('%s', datetime(t, 'unixepoch', 'localtime', 'start of day'), 'utc') AS INTEGER)\n         ELSE CAST(strftime('%s', datetime(t, 'unixepoch', 'localtime', 'start of month'), 'utc') AS INTEGER)\n       END AS time,\n       SUM(grid) * 900 / 3600.0 / 1000.0 AS \"Net from PG&E\"\nFROM b, k\nWHERE load IS NOT NULL\nGROUP BY 1\nORDER BY 1",
+          "queryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(($__from / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), gb AS (\n  -- PG&E's own hourly meter history (Green Button import), spread evenly\n  -- over the hour's quarters. Used only where the Eagle has no reading.\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 + o.off AS t,\n         'pge' AS slug,\n         SUM(CASE WHEN se.metric = 'grid_import_wh' THEN s.value ELSE -s.value END)\n           * 3600.0 / MAX(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN (SELECT 0 AS off UNION ALL SELECT 900 UNION ALL SELECT 1800 UNION ALL SELECT 2700) o\n    ON o.off < s.duration_s\n  WHERE se.metric IN ('grid_import_wh', 'grid_export_wh')\n    AND s.ts >= datetime(($__from / 1000 / 3600) * 3600 - 3600, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY s.ts, o.off\n  HAVING COUNT(*) = 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         COALESCE(MAX(CASE WHEN slug = 'eagle' THEN w END),\n                  MAX(CASE WHEN slug = 'pge' THEN w END)) AS grid,\n         MAX(slug = 'eagle') AS live_grid\n  FROM (SELECT t, slug, w FROM raw\n        UNION ALL\n        SELECT t, slug, w FROM gb\n        WHERE t >= ($__from / 1000 / 900) * 900 AND t < $__to / 1000)\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND sl + grid >= 0\n              THEN sl + grid END AS load\n  FROM (SELECT p.*,\n               -- An hourly PG&E reading pairs with the hour's mean solar;\n               -- per-quarter solar against an hourly grid figure would go\n               -- negative whenever production swung within the hour.\n               CASE WHEN live_grid = 1\n                    THEN COALESCE(main, 0) + COALESCE(guest, 0)\n                    ELSE AVG(COALESCE(main, 0) + COALESCE(guest, 0)) OVER (PARTITION BY t / 3600)\n               END AS sl\n        FROM p)\n), k AS (\n  -- Bar size follows the range: quarter-hours up to 2 days, hours up to\n  -- 2 weeks, local days up to 4 months, local months beyond that.\n  SELECT CASE WHEN $__to - $__from <= 2 * 86400000 THEN 900\n              WHEN $__to - $__from <= 14 * 86400000 THEN 3600\n              WHEN $__to - $__from <= 120 * 86400000 THEN 86400\n              ELSE 0 END AS step\n)\nSELECT CASE k.step\n         WHEN 900 THEN t\n         WHEN 3600 THEN (t / 3600) * 3600\n         WHEN 86400 THEN CAST(strftime('%s', datetime(t, 'unixepoch', 'localtime', 'start of day'), 'utc') AS INTEGER)\n         ELSE CAST(strftime('%s', datetime(t, 'unixepoch', 'localtime', 'start of month'), 'utc') AS INTEGER)\n       END AS time,\n       SUM(grid) * 900 / 3600.0 / 1000.0 AS \"Net from PG&E\"\nFROM b, k\nWHERE load IS NOT NULL\nGROUP BY 1\nORDER BY 1"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatth",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#2E8B7F",
+                "value": null
+              },
+              {
+                "color": "#C4463A",
+                "value": 0
+              }
+            ]
+          },
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 70,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisCenteredZero": false,
+            "gradientMode": "scheme",
+            "barAlignment": 1
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "row",
+      "id": 13,
+      "title": "Compare — fixed periods, ignores the time picker",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 50
+      }
+    },
+    {
+      "type": "barchart",
+      "id": 14,
+      "title": "Solar produced by month — year over year",
+      "description": "kWh from both arrays in each calendar month, one bar per year, every year on record (main array from 2016, guest house from 2023). This year is in full colour, last year lighter, earlier years grey. The first year and the current month are partial, and a month with missing data reads low — only stored samples count.",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 51
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(((0) / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), gb AS (\n  -- PG&E's own hourly meter history (Green Button import), spread evenly\n  -- over the hour's quarters. Used only where the Eagle has no reading.\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 + o.off AS t,\n         'pge' AS slug,\n         SUM(CASE WHEN se.metric = 'grid_import_wh' THEN s.value ELSE -s.value END)\n           * 3600.0 / MAX(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN (SELECT 0 AS off UNION ALL SELECT 900 UNION ALL SELECT 1800 UNION ALL SELECT 2700) o\n    ON o.off < s.duration_s\n  WHERE se.metric IN ('grid_import_wh', 'grid_export_wh')\n    AND s.ts >= datetime(((0) / 1000 / 3600) * 3600 - 3600, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY s.ts, o.off\n  HAVING COUNT(*) = 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         COALESCE(MAX(CASE WHEN slug = 'eagle' THEN w END),\n                  MAX(CASE WHEN slug = 'pge' THEN w END)) AS grid,\n         MAX(slug = 'eagle') AS live_grid\n  FROM (SELECT t, slug, w FROM raw\n        UNION ALL\n        SELECT t, slug, w FROM gb\n        WHERE t >= ((0) / 1000 / 900) * 900 AND t < (CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000)\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND sl + grid >= 0\n              THEN sl + grid END AS load\n  FROM (SELECT p.*,\n               -- An hourly PG&E reading pairs with the hour's mean solar;\n               -- per-quarter solar against an hourly grid figure would go\n               -- negative whenever production swung within the hour.\n               CASE WHEN live_grid = 1\n                    THEN COALESCE(main, 0) + COALESCE(guest, 0)\n                    ELSE AVG(COALESCE(main, 0) + COALESCE(guest, 0)) OVER (PARTITION BY t / 3600)\n               END AS sl\n        FROM p)\n), agg AS (\n  SELECT CAST(strftime('%m', t, 'unixepoch', 'localtime') AS INTEGER) AS m,\n         strftime('%Y', t, 'unixepoch', 'localtime') AS year,\n         SUM(solar) * 900 / 3600.0 / 1000.0 AS kwh\n  FROM b\n  WHERE 1\n  GROUP BY 1, 2\n), months(m) AS (\n  SELECT 1 UNION ALL SELECT m + 1 FROM months WHERE m < 12\n)\nSELECT substr('JanFebMarAprMayJunJulAugSepOctNovDec', (months.m - 1) * 3 + 1, 3) AS month,\n       -- Named relative to today so the two recent years can be coloured.\n       y.year || CASE CAST(strftime('%Y', 'now', 'localtime') AS INTEGER) - CAST(y.year AS INTEGER)\n                   WHEN 0 THEN ' (this year)' WHEN 1 THEN ' (last year)' ELSE '' END AS year,\n       agg.kwh AS kwh\nFROM months\nCROSS JOIN (SELECT DISTINCT year FROM agg) y\nLEFT JOIN agg ON agg.m = months.m AND agg.year = y.year\nORDER BY months.m, y.year",
+          "queryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(((0) / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), gb AS (\n  -- PG&E's own hourly meter history (Green Button import), spread evenly\n  -- over the hour's quarters. Used only where the Eagle has no reading.\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 + o.off AS t,\n         'pge' AS slug,\n         SUM(CASE WHEN se.metric = 'grid_import_wh' THEN s.value ELSE -s.value END)\n           * 3600.0 / MAX(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN (SELECT 0 AS off UNION ALL SELECT 900 UNION ALL SELECT 1800 UNION ALL SELECT 2700) o\n    ON o.off < s.duration_s\n  WHERE se.metric IN ('grid_import_wh', 'grid_export_wh')\n    AND s.ts >= datetime(((0) / 1000 / 3600) * 3600 - 3600, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY s.ts, o.off\n  HAVING COUNT(*) = 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         COALESCE(MAX(CASE WHEN slug = 'eagle' THEN w END),\n                  MAX(CASE WHEN slug = 'pge' THEN w END)) AS grid,\n         MAX(slug = 'eagle') AS live_grid\n  FROM (SELECT t, slug, w FROM raw\n        UNION ALL\n        SELECT t, slug, w FROM gb\n        WHERE t >= ((0) / 1000 / 900) * 900 AND t < (CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000)\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND sl + grid >= 0\n              THEN sl + grid END AS load\n  FROM (SELECT p.*,\n               -- An hourly PG&E reading pairs with the hour's mean solar;\n               -- per-quarter solar against an hourly grid figure would go\n               -- negative whenever production swung within the hour.\n               CASE WHEN live_grid = 1\n                    THEN COALESCE(main, 0) + COALESCE(guest, 0)\n                    ELSE AVG(COALESCE(main, 0) + COALESCE(guest, 0)) OVER (PARTITION BY t / 3600)\n               END AS sl\n        FROM p)\n), agg AS (\n  SELECT CAST(strftime('%m', t, 'unixepoch', 'localtime') AS INTEGER) AS m,\n         strftime('%Y', t, 'unixepoch', 'localtime') AS year,\n         SUM(solar) * 900 / 3600.0 / 1000.0 AS kwh\n  FROM b\n  WHERE 1\n  GROUP BY 1, 2\n), months(m) AS (\n  SELECT 1 UNION ALL SELECT m + 1 FROM months WHERE m < 12\n)\nSELECT substr('JanFebMarAprMayJunJulAugSepOctNovDec', (months.m - 1) * 3 + 1, 3) AS month,\n       -- Named relative to today so the two recent years can be coloured.\n       y.year || CASE CAST(strftime('%Y', 'now', 'localtime') AS INTEGER) - CAST(y.year AS INTEGER)\n                   WHEN 0 THEN ' (this year)' WHEN 1 THEN ' (last year)' ELSE '' END AS year,\n       agg.kwh AS kwh\nFROM months\nCROSS JOIN (SELECT DISTINCT year FROM agg) y\nLEFT JOIN agg ON agg.m = months.m AND agg.year = y.year\nORDER BY months.m, y.year"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "groupingToMatrix",
+          "options": {
+            "columnField": "year",
+            "rowField": "month",
+            "valueField": "kwh",
+            "emptyValue": "null"
+          }
+        }
+      ],
+      "options": {
+        "orientation": "vertical",
+        "showValue": "never",
+        "stacking": "none",
+        "groupWidth": 0.8,
+        "barWidth": 0.9,
+        "xTickLabelRotation": 0,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: kWh",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#D5D9DF"
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 1
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*\\(this year\\)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E5A23C"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*\\(last year\\)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F2CD8E"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "barchart",
+      "id": 15,
+      "title": "House use by month — year over year",
+      "description": "kWh the house used in each calendar month (solar plus grid), one bar per year. Starts in late 2023, when grid data begins. This year is in full colour, last year lighter, earlier years grey. The first year and the current month are partial, and a month with missing data reads low — only stored samples count.",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 60
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(((0) / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), gb AS (\n  -- PG&E's own hourly meter history (Green Button import), spread evenly\n  -- over the hour's quarters. Used only where the Eagle has no reading.\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 + o.off AS t,\n         'pge' AS slug,\n         SUM(CASE WHEN se.metric = 'grid_import_wh' THEN s.value ELSE -s.value END)\n           * 3600.0 / MAX(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN (SELECT 0 AS off UNION ALL SELECT 900 UNION ALL SELECT 1800 UNION ALL SELECT 2700) o\n    ON o.off < s.duration_s\n  WHERE se.metric IN ('grid_import_wh', 'grid_export_wh')\n    AND s.ts >= datetime(((0) / 1000 / 3600) * 3600 - 3600, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY s.ts, o.off\n  HAVING COUNT(*) = 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         COALESCE(MAX(CASE WHEN slug = 'eagle' THEN w END),\n                  MAX(CASE WHEN slug = 'pge' THEN w END)) AS grid,\n         MAX(slug = 'eagle') AS live_grid\n  FROM (SELECT t, slug, w FROM raw\n        UNION ALL\n        SELECT t, slug, w FROM gb\n        WHERE t >= ((0) / 1000 / 900) * 900 AND t < (CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000)\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND sl + grid >= 0\n              THEN sl + grid END AS load\n  FROM (SELECT p.*,\n               -- An hourly PG&E reading pairs with the hour's mean solar;\n               -- per-quarter solar against an hourly grid figure would go\n               -- negative whenever production swung within the hour.\n               CASE WHEN live_grid = 1\n                    THEN COALESCE(main, 0) + COALESCE(guest, 0)\n                    ELSE AVG(COALESCE(main, 0) + COALESCE(guest, 0)) OVER (PARTITION BY t / 3600)\n               END AS sl\n        FROM p)\n), agg AS (\n  SELECT CAST(strftime('%m', t, 'unixepoch', 'localtime') AS INTEGER) AS m,\n         strftime('%Y', t, 'unixepoch', 'localtime') AS year,\n         SUM(load) * 900 / 3600.0 / 1000.0 AS kwh\n  FROM b\n  WHERE load IS NOT NULL\n  GROUP BY 1, 2\n), months(m) AS (\n  SELECT 1 UNION ALL SELECT m + 1 FROM months WHERE m < 12\n)\nSELECT substr('JanFebMarAprMayJunJulAugSepOctNovDec', (months.m - 1) * 3 + 1, 3) AS month,\n       -- Named relative to today so the two recent years can be coloured.\n       y.year || CASE CAST(strftime('%Y', 'now', 'localtime') AS INTEGER) - CAST(y.year AS INTEGER)\n                   WHEN 0 THEN ' (this year)' WHEN 1 THEN ' (last year)' ELSE '' END AS year,\n       agg.kwh AS kwh\nFROM months\nCROSS JOIN (SELECT DISTINCT year FROM agg) y\nLEFT JOIN agg ON agg.m = months.m AND agg.year = y.year\nORDER BY months.m, y.year",
+          "queryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(((0) / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), gb AS (\n  -- PG&E's own hourly meter history (Green Button import), spread evenly\n  -- over the hour's quarters. Used only where the Eagle has no reading.\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 + o.off AS t,\n         'pge' AS slug,\n         SUM(CASE WHEN se.metric = 'grid_import_wh' THEN s.value ELSE -s.value END)\n           * 3600.0 / MAX(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN (SELECT 0 AS off UNION ALL SELECT 900 UNION ALL SELECT 1800 UNION ALL SELECT 2700) o\n    ON o.off < s.duration_s\n  WHERE se.metric IN ('grid_import_wh', 'grid_export_wh')\n    AND s.ts >= datetime(((0) / 1000 / 3600) * 3600 - 3600, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY s.ts, o.off\n  HAVING COUNT(*) = 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         COALESCE(MAX(CASE WHEN slug = 'eagle' THEN w END),\n                  MAX(CASE WHEN slug = 'pge' THEN w END)) AS grid,\n         MAX(slug = 'eagle') AS live_grid\n  FROM (SELECT t, slug, w FROM raw\n        UNION ALL\n        SELECT t, slug, w FROM gb\n        WHERE t >= ((0) / 1000 / 900) * 900 AND t < (CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000)\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND sl + grid >= 0\n              THEN sl + grid END AS load\n  FROM (SELECT p.*,\n               -- An hourly PG&E reading pairs with the hour's mean solar;\n               -- per-quarter solar against an hourly grid figure would go\n               -- negative whenever production swung within the hour.\n               CASE WHEN live_grid = 1\n                    THEN COALESCE(main, 0) + COALESCE(guest, 0)\n                    ELSE AVG(COALESCE(main, 0) + COALESCE(guest, 0)) OVER (PARTITION BY t / 3600)\n               END AS sl\n        FROM p)\n), agg AS (\n  SELECT CAST(strftime('%m', t, 'unixepoch', 'localtime') AS INTEGER) AS m,\n         strftime('%Y', t, 'unixepoch', 'localtime') AS year,\n         SUM(load) * 900 / 3600.0 / 1000.0 AS kwh\n  FROM b\n  WHERE load IS NOT NULL\n  GROUP BY 1, 2\n), months(m) AS (\n  SELECT 1 UNION ALL SELECT m + 1 FROM months WHERE m < 12\n)\nSELECT substr('JanFebMarAprMayJunJulAugSepOctNovDec', (months.m - 1) * 3 + 1, 3) AS month,\n       -- Named relative to today so the two recent years can be coloured.\n       y.year || CASE CAST(strftime('%Y', 'now', 'localtime') AS INTEGER) - CAST(y.year AS INTEGER)\n                   WHEN 0 THEN ' (this year)' WHEN 1 THEN ' (last year)' ELSE '' END AS year,\n       agg.kwh AS kwh\nFROM months\nCROSS JOIN (SELECT DISTINCT year FROM agg) y\nLEFT JOIN agg ON agg.m = months.m AND agg.year = y.year\nORDER BY months.m, y.year"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "groupingToMatrix",
+          "options": {
+            "columnField": "year",
+            "rowField": "month",
+            "valueField": "kwh",
+            "emptyValue": "null"
+          }
+        }
+      ],
+      "options": {
+        "orientation": "vertical",
+        "showValue": "never",
+        "stacking": "none",
+        "groupWidth": 0.8,
+        "barWidth": 0.9,
+        "xTickLabelRotation": 0,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: kWh",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#D5D9DF"
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 1
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*\\(this year\\)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#4B7FD6"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*\\(last year\\)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#A9C2EC"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "barchart",
+      "id": 16,
+      "title": "Net from PG&E by month — year over year",
+      "description": "Import minus export in each calendar month, one bar per year; below zero means a net-export month. Starts in late 2023, when grid data begins. This year is in full colour, last year lighter, earlier years grey. The first year and the current month are partial, and a month with missing data reads low — only stored samples count.",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 60
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(((0) / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), gb AS (\n  -- PG&E's own hourly meter history (Green Button import), spread evenly\n  -- over the hour's quarters. Used only where the Eagle has no reading.\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 + o.off AS t,\n         'pge' AS slug,\n         SUM(CASE WHEN se.metric = 'grid_import_wh' THEN s.value ELSE -s.value END)\n           * 3600.0 / MAX(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN (SELECT 0 AS off UNION ALL SELECT 900 UNION ALL SELECT 1800 UNION ALL SELECT 2700) o\n    ON o.off < s.duration_s\n  WHERE se.metric IN ('grid_import_wh', 'grid_export_wh')\n    AND s.ts >= datetime(((0) / 1000 / 3600) * 3600 - 3600, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY s.ts, o.off\n  HAVING COUNT(*) = 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         COALESCE(MAX(CASE WHEN slug = 'eagle' THEN w END),\n                  MAX(CASE WHEN slug = 'pge' THEN w END)) AS grid,\n         MAX(slug = 'eagle') AS live_grid\n  FROM (SELECT t, slug, w FROM raw\n        UNION ALL\n        SELECT t, slug, w FROM gb\n        WHERE t >= ((0) / 1000 / 900) * 900 AND t < (CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000)\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND sl + grid >= 0\n              THEN sl + grid END AS load\n  FROM (SELECT p.*,\n               -- An hourly PG&E reading pairs with the hour's mean solar;\n               -- per-quarter solar against an hourly grid figure would go\n               -- negative whenever production swung within the hour.\n               CASE WHEN live_grid = 1\n                    THEN COALESCE(main, 0) + COALESCE(guest, 0)\n                    ELSE AVG(COALESCE(main, 0) + COALESCE(guest, 0)) OVER (PARTITION BY t / 3600)\n               END AS sl\n        FROM p)\n), agg AS (\n  SELECT CAST(strftime('%m', t, 'unixepoch', 'localtime') AS INTEGER) AS m,\n         strftime('%Y', t, 'unixepoch', 'localtime') AS year,\n         SUM(grid) * 900 / 3600.0 / 1000.0 AS kwh\n  FROM b\n  WHERE load IS NOT NULL\n  GROUP BY 1, 2\n), months(m) AS (\n  SELECT 1 UNION ALL SELECT m + 1 FROM months WHERE m < 12\n)\nSELECT substr('JanFebMarAprMayJunJulAugSepOctNovDec', (months.m - 1) * 3 + 1, 3) AS month,\n       -- Named relative to today so the two recent years can be coloured.\n       y.year || CASE CAST(strftime('%Y', 'now', 'localtime') AS INTEGER) - CAST(y.year AS INTEGER)\n                   WHEN 0 THEN ' (this year)' WHEN 1 THEN ' (last year)' ELSE '' END AS year,\n       agg.kwh AS kwh\nFROM months\nCROSS JOIN (SELECT DISTINCT year FROM agg) y\nLEFT JOIN agg ON agg.m = months.m AND agg.year = y.year\nORDER BY months.m, y.year",
+          "queryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(((0) / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), gb AS (\n  -- PG&E's own hourly meter history (Green Button import), spread evenly\n  -- over the hour's quarters. Used only where the Eagle has no reading.\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 + o.off AS t,\n         'pge' AS slug,\n         SUM(CASE WHEN se.metric = 'grid_import_wh' THEN s.value ELSE -s.value END)\n           * 3600.0 / MAX(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN (SELECT 0 AS off UNION ALL SELECT 900 UNION ALL SELECT 1800 UNION ALL SELECT 2700) o\n    ON o.off < s.duration_s\n  WHERE se.metric IN ('grid_import_wh', 'grid_export_wh')\n    AND s.ts >= datetime(((0) / 1000 / 3600) * 3600 - 3600, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY s.ts, o.off\n  HAVING COUNT(*) = 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         COALESCE(MAX(CASE WHEN slug = 'eagle' THEN w END),\n                  MAX(CASE WHEN slug = 'pge' THEN w END)) AS grid,\n         MAX(slug = 'eagle') AS live_grid\n  FROM (SELECT t, slug, w FROM raw\n        UNION ALL\n        SELECT t, slug, w FROM gb\n        WHERE t >= ((0) / 1000 / 900) * 900 AND t < (CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000)\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND sl + grid >= 0\n              THEN sl + grid END AS load\n  FROM (SELECT p.*,\n               -- An hourly PG&E reading pairs with the hour's mean solar;\n               -- per-quarter solar against an hourly grid figure would go\n               -- negative whenever production swung within the hour.\n               CASE WHEN live_grid = 1\n                    THEN COALESCE(main, 0) + COALESCE(guest, 0)\n                    ELSE AVG(COALESCE(main, 0) + COALESCE(guest, 0)) OVER (PARTITION BY t / 3600)\n               END AS sl\n        FROM p)\n), agg AS (\n  SELECT CAST(strftime('%m', t, 'unixepoch', 'localtime') AS INTEGER) AS m,\n         strftime('%Y', t, 'unixepoch', 'localtime') AS year,\n         SUM(grid) * 900 / 3600.0 / 1000.0 AS kwh\n  FROM b\n  WHERE load IS NOT NULL\n  GROUP BY 1, 2\n), months(m) AS (\n  SELECT 1 UNION ALL SELECT m + 1 FROM months WHERE m < 12\n)\nSELECT substr('JanFebMarAprMayJunJulAugSepOctNovDec', (months.m - 1) * 3 + 1, 3) AS month,\n       -- Named relative to today so the two recent years can be coloured.\n       y.year || CASE CAST(strftime('%Y', 'now', 'localtime') AS INTEGER) - CAST(y.year AS INTEGER)\n                   WHEN 0 THEN ' (this year)' WHEN 1 THEN ' (last year)' ELSE '' END AS year,\n       agg.kwh AS kwh\nFROM months\nCROSS JOIN (SELECT DISTINCT year FROM agg) y\nLEFT JOIN agg ON agg.m = months.m AND agg.year = y.year\nORDER BY months.m, y.year"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "groupingToMatrix",
+          "options": {
+            "columnField": "year",
+            "rowField": "month",
+            "valueField": "kwh",
+            "emptyValue": "null"
+          }
+        }
+      ],
+      "options": {
+        "orientation": "vertical",
+        "showValue": "never",
+        "stacking": "none",
+        "groupWidth": 0.8,
+        "barWidth": 0.9,
+        "xTickLabelRotation": 0,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: kWh",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#D5D9DF"
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 1
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*\\(this year\\)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#45526B"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*\\(last year\\)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8F9CB5"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "table",
+      "id": 17,
+      "title": "Month to date vs. last month",
+      "description": "This month so far against the same stretch of last month (day 1 up to the same day and hour), plus last month's total. Change % is left blank where last month's figure was zero or negative. For net, a negative change means less bought from PG&E.",
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 69
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(((CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) * 1000) / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), gb AS (\n  -- PG&E's own hourly meter history (Green Button import), spread evenly\n  -- over the hour's quarters. Used only where the Eagle has no reading.\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 + o.off AS t,\n         'pge' AS slug,\n         SUM(CASE WHEN se.metric = 'grid_import_wh' THEN s.value ELSE -s.value END)\n           * 3600.0 / MAX(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN (SELECT 0 AS off UNION ALL SELECT 900 UNION ALL SELECT 1800 UNION ALL SELECT 2700) o\n    ON o.off < s.duration_s\n  WHERE se.metric IN ('grid_import_wh', 'grid_export_wh')\n    AND s.ts >= datetime(((CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) * 1000) / 1000 / 3600) * 3600 - 3600, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY s.ts, o.off\n  HAVING COUNT(*) = 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         COALESCE(MAX(CASE WHEN slug = 'eagle' THEN w END),\n                  MAX(CASE WHEN slug = 'pge' THEN w END)) AS grid,\n         MAX(slug = 'eagle') AS live_grid\n  FROM (SELECT t, slug, w FROM raw\n        UNION ALL\n        SELECT t, slug, w FROM gb\n        WHERE t >= ((CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) * 1000) / 1000 / 900) * 900 AND t < (CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000)\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND sl + grid >= 0\n              THEN sl + grid END AS load\n  FROM (SELECT p.*,\n               -- An hourly PG&E reading pairs with the hour's mean solar;\n               -- per-quarter solar against an hourly grid figure would go\n               -- negative whenever production swung within the hour.\n               CASE WHEN live_grid = 1\n                    THEN COALESCE(main, 0) + COALESCE(guest, 0)\n                    ELSE AVG(COALESCE(main, 0) + COALESCE(guest, 0)) OVER (PARTITION BY t / 3600)\n               END AS sl\n        FROM p)\n), bounds AS (\n  SELECT CAST(strftime('%s', 'now', 'localtime', 'start of month', 'utc') AS INTEGER) AS ms,\n         CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) AS ls,\n         CAST(strftime('%s', 'now') AS INTEGER) AS now\n), q AS (\n  SELECT b.*, b.t >= ms AS cur,\n         -- the same stretch of last month as has passed of this one\n         b.t < ms AND b.t < MIN(ms, ls + (now - ms)) AS same\n  FROM b, bounds\n), m AS (\n  SELECT 1 AS o, 'Solar produced' AS what,\n         SUM(CASE WHEN cur THEN solar END) AS tm, SUM(CASE WHEN same THEN solar END) AS ls,\n         SUM(CASE WHEN NOT cur THEN solar END) AS lm FROM q\n  UNION ALL\n  SELECT 2, 'House used', SUM(CASE WHEN cur THEN load END), SUM(CASE WHEN same THEN load END),\n         SUM(CASE WHEN NOT cur THEN load END) FROM q\n  UNION ALL\n  SELECT 3, 'Net from PG&E', SUM(CASE WHEN cur AND load IS NOT NULL THEN grid END),\n         SUM(CASE WHEN same AND load IS NOT NULL THEN grid END),\n         SUM(CASE WHEN NOT cur AND load IS NOT NULL THEN grid END) FROM q\n)\nSELECT what AS \" \",\n       tm * 900 / 3600000.0 AS \"This month so far\",\n       ls * 900 / 3600000.0 AS \"Same days last month\",\n       (tm - ls) * 900 / 3600000.0 AS \"Change\",\n       CASE WHEN ls > 0 THEN (tm - ls) * 1.0 / ls END AS \"Change %\",\n       lm * 900 / 3600000.0 AS \"All of last month\"\nFROM m ORDER BY o",
+          "queryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(((CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) * 1000) / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), gb AS (\n  -- PG&E's own hourly meter history (Green Button import), spread evenly\n  -- over the hour's quarters. Used only where the Eagle has no reading.\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 + o.off AS t,\n         'pge' AS slug,\n         SUM(CASE WHEN se.metric = 'grid_import_wh' THEN s.value ELSE -s.value END)\n           * 3600.0 / MAX(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN (SELECT 0 AS off UNION ALL SELECT 900 UNION ALL SELECT 1800 UNION ALL SELECT 2700) o\n    ON o.off < s.duration_s\n  WHERE se.metric IN ('grid_import_wh', 'grid_export_wh')\n    AND s.ts >= datetime(((CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) * 1000) / 1000 / 3600) * 3600 - 3600, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY s.ts, o.off\n  HAVING COUNT(*) = 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         COALESCE(MAX(CASE WHEN slug = 'eagle' THEN w END),\n                  MAX(CASE WHEN slug = 'pge' THEN w END)) AS grid,\n         MAX(slug = 'eagle') AS live_grid\n  FROM (SELECT t, slug, w FROM raw\n        UNION ALL\n        SELECT t, slug, w FROM gb\n        WHERE t >= ((CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) * 1000) / 1000 / 900) * 900 AND t < (CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000)\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND sl + grid >= 0\n              THEN sl + grid END AS load\n  FROM (SELECT p.*,\n               -- An hourly PG&E reading pairs with the hour's mean solar;\n               -- per-quarter solar against an hourly grid figure would go\n               -- negative whenever production swung within the hour.\n               CASE WHEN live_grid = 1\n                    THEN COALESCE(main, 0) + COALESCE(guest, 0)\n                    ELSE AVG(COALESCE(main, 0) + COALESCE(guest, 0)) OVER (PARTITION BY t / 3600)\n               END AS sl\n        FROM p)\n), bounds AS (\n  SELECT CAST(strftime('%s', 'now', 'localtime', 'start of month', 'utc') AS INTEGER) AS ms,\n         CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) AS ls,\n         CAST(strftime('%s', 'now') AS INTEGER) AS now\n), q AS (\n  SELECT b.*, b.t >= ms AS cur,\n         -- the same stretch of last month as has passed of this one\n         b.t < ms AND b.t < MIN(ms, ls + (now - ms)) AS same\n  FROM b, bounds\n), m AS (\n  SELECT 1 AS o, 'Solar produced' AS what,\n         SUM(CASE WHEN cur THEN solar END) AS tm, SUM(CASE WHEN same THEN solar END) AS ls,\n         SUM(CASE WHEN NOT cur THEN solar END) AS lm FROM q\n  UNION ALL\n  SELECT 2, 'House used', SUM(CASE WHEN cur THEN load END), SUM(CASE WHEN same THEN load END),\n         SUM(CASE WHEN NOT cur THEN load END) FROM q\n  UNION ALL\n  SELECT 3, 'Net from PG&E', SUM(CASE WHEN cur AND load IS NOT NULL THEN grid END),\n         SUM(CASE WHEN same AND load IS NOT NULL THEN grid END),\n         SUM(CASE WHEN NOT cur AND load IS NOT NULL THEN grid END) FROM q\n)\nSELECT what AS \" \",\n       tm * 900 / 3600000.0 AS \"This month so far\",\n       ls * 900 / 3600000.0 AS \"Same days last month\",\n       (tm - ls) * 900 / 3600000.0 AS \"Change\",\n       CASE WHEN ls > 0 THEN (tm - ls) * 1.0 / ls END AS \"Change %\",\n       lm * 900 / 3600000.0 AS \"All of last month\"\nFROM m ORDER BY o"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatth",
+          "decimals": 1,
+          "custom": {
+            "align": "auto"
+          },
+          "noValue": "—"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Change %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "trend",
+      "id": 18,
+      "title": "Solar — this month vs. last",
+      "description": "Running kWh total by day of month: this month solid, last month dashed.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 74
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(((CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) * 1000) / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), gb AS (\n  -- PG&E's own hourly meter history (Green Button import), spread evenly\n  -- over the hour's quarters. Used only where the Eagle has no reading.\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 + o.off AS t,\n         'pge' AS slug,\n         SUM(CASE WHEN se.metric = 'grid_import_wh' THEN s.value ELSE -s.value END)\n           * 3600.0 / MAX(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN (SELECT 0 AS off UNION ALL SELECT 900 UNION ALL SELECT 1800 UNION ALL SELECT 2700) o\n    ON o.off < s.duration_s\n  WHERE se.metric IN ('grid_import_wh', 'grid_export_wh')\n    AND s.ts >= datetime(((CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) * 1000) / 1000 / 3600) * 3600 - 3600, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY s.ts, o.off\n  HAVING COUNT(*) = 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         COALESCE(MAX(CASE WHEN slug = 'eagle' THEN w END),\n                  MAX(CASE WHEN slug = 'pge' THEN w END)) AS grid,\n         MAX(slug = 'eagle') AS live_grid\n  FROM (SELECT t, slug, w FROM raw\n        UNION ALL\n        SELECT t, slug, w FROM gb\n        WHERE t >= ((CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) * 1000) / 1000 / 900) * 900 AND t < (CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000)\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND sl + grid >= 0\n              THEN sl + grid END AS load\n  FROM (SELECT p.*,\n               -- An hourly PG&E reading pairs with the hour's mean solar;\n               -- per-quarter solar against an hourly grid figure would go\n               -- negative whenever production swung within the hour.\n               CASE WHEN live_grid = 1\n                    THEN COALESCE(main, 0) + COALESCE(guest, 0)\n                    ELSE AVG(COALESCE(main, 0) + COALESCE(guest, 0)) OVER (PARTITION BY t / 3600)\n               END AS sl\n        FROM p)\n), bounds AS (\n  SELECT CAST(strftime('%s', 'now', 'localtime', 'start of month', 'utc') AS INTEGER) AS ms,\n         CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) AS ls,\n         CAST(strftime('%s', 'now') AS INTEGER) AS now\n), d AS (\n  SELECT CAST(strftime('%d', t, 'unixepoch', 'localtime') AS INTEGER) AS day,\n         SUM(CASE WHEN t < ms THEN solar END) * 900 / 3600000.0 AS lm,\n         SUM(CASE WHEN t >= ms THEN solar END) * 900 / 3600000.0 AS tm\n  FROM b, bounds\n  WHERE 1\n  GROUP BY 1\n)\nSELECT day AS \"Day of month\",\n       SUM(lm) OVER (ORDER BY day) AS \"Last month\",\n       CASE WHEN day <= CAST(strftime('%d', 'now', 'localtime') AS INTEGER)\n            THEN SUM(tm) OVER (ORDER BY day) END AS \"This month\"\nFROM d ORDER BY day",
+          "queryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(((CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) * 1000) / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), gb AS (\n  -- PG&E's own hourly meter history (Green Button import), spread evenly\n  -- over the hour's quarters. Used only where the Eagle has no reading.\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 + o.off AS t,\n         'pge' AS slug,\n         SUM(CASE WHEN se.metric = 'grid_import_wh' THEN s.value ELSE -s.value END)\n           * 3600.0 / MAX(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN (SELECT 0 AS off UNION ALL SELECT 900 UNION ALL SELECT 1800 UNION ALL SELECT 2700) o\n    ON o.off < s.duration_s\n  WHERE se.metric IN ('grid_import_wh', 'grid_export_wh')\n    AND s.ts >= datetime(((CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) * 1000) / 1000 / 3600) * 3600 - 3600, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY s.ts, o.off\n  HAVING COUNT(*) = 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         COALESCE(MAX(CASE WHEN slug = 'eagle' THEN w END),\n                  MAX(CASE WHEN slug = 'pge' THEN w END)) AS grid,\n         MAX(slug = 'eagle') AS live_grid\n  FROM (SELECT t, slug, w FROM raw\n        UNION ALL\n        SELECT t, slug, w FROM gb\n        WHERE t >= ((CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) * 1000) / 1000 / 900) * 900 AND t < (CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000)\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND sl + grid >= 0\n              THEN sl + grid END AS load\n  FROM (SELECT p.*,\n               -- An hourly PG&E reading pairs with the hour's mean solar;\n               -- per-quarter solar against an hourly grid figure would go\n               -- negative whenever production swung within the hour.\n               CASE WHEN live_grid = 1\n                    THEN COALESCE(main, 0) + COALESCE(guest, 0)\n                    ELSE AVG(COALESCE(main, 0) + COALESCE(guest, 0)) OVER (PARTITION BY t / 3600)\n               END AS sl\n        FROM p)\n), bounds AS (\n  SELECT CAST(strftime('%s', 'now', 'localtime', 'start of month', 'utc') AS INTEGER) AS ms,\n         CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) AS ls,\n         CAST(strftime('%s', 'now') AS INTEGER) AS now\n), d AS (\n  SELECT CAST(strftime('%d', t, 'unixepoch', 'localtime') AS INTEGER) AS day,\n         SUM(CASE WHEN t < ms THEN solar END) * 900 / 3600000.0 AS lm,\n         SUM(CASE WHEN t >= ms THEN solar END) * 900 / 3600000.0 AS tm\n  FROM b, bounds\n  WHERE 1\n  GROUP BY 1\n)\nSELECT day AS \"Day of month\",\n       SUM(lm) OVER (ORDER BY day) AS \"Last month\",\n       CASE WHEN day <= CAST(strftime('%d', 'now', 'localtime') AS INTEGER)\n            THEN SUM(tm) OVER (ORDER BY day) END AS \"This month\"\nFROM d ORDER BY day"
+        }
+      ],
+      "options": {
+        "xField": "Day of month",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatth",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Day of month"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "This month"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E5A23C"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Last month"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E5A23C"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    6,
+                    4
+                  ]
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "trend",
+      "id": 19,
+      "title": "House use — this month vs. last",
+      "description": "Running kWh total by day of month: this month solid, last month dashed.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 74
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(((CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) * 1000) / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), gb AS (\n  -- PG&E's own hourly meter history (Green Button import), spread evenly\n  -- over the hour's quarters. Used only where the Eagle has no reading.\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 + o.off AS t,\n         'pge' AS slug,\n         SUM(CASE WHEN se.metric = 'grid_import_wh' THEN s.value ELSE -s.value END)\n           * 3600.0 / MAX(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN (SELECT 0 AS off UNION ALL SELECT 900 UNION ALL SELECT 1800 UNION ALL SELECT 2700) o\n    ON o.off < s.duration_s\n  WHERE se.metric IN ('grid_import_wh', 'grid_export_wh')\n    AND s.ts >= datetime(((CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) * 1000) / 1000 / 3600) * 3600 - 3600, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY s.ts, o.off\n  HAVING COUNT(*) = 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         COALESCE(MAX(CASE WHEN slug = 'eagle' THEN w END),\n                  MAX(CASE WHEN slug = 'pge' THEN w END)) AS grid,\n         MAX(slug = 'eagle') AS live_grid\n  FROM (SELECT t, slug, w FROM raw\n        UNION ALL\n        SELECT t, slug, w FROM gb\n        WHERE t >= ((CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) * 1000) / 1000 / 900) * 900 AND t < (CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000)\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND sl + grid >= 0\n              THEN sl + grid END AS load\n  FROM (SELECT p.*,\n               -- An hourly PG&E reading pairs with the hour's mean solar;\n               -- per-quarter solar against an hourly grid figure would go\n               -- negative whenever production swung within the hour.\n               CASE WHEN live_grid = 1\n                    THEN COALESCE(main, 0) + COALESCE(guest, 0)\n                    ELSE AVG(COALESCE(main, 0) + COALESCE(guest, 0)) OVER (PARTITION BY t / 3600)\n               END AS sl\n        FROM p)\n), bounds AS (\n  SELECT CAST(strftime('%s', 'now', 'localtime', 'start of month', 'utc') AS INTEGER) AS ms,\n         CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) AS ls,\n         CAST(strftime('%s', 'now') AS INTEGER) AS now\n), d AS (\n  SELECT CAST(strftime('%d', t, 'unixepoch', 'localtime') AS INTEGER) AS day,\n         SUM(CASE WHEN t < ms THEN load END) * 900 / 3600000.0 AS lm,\n         SUM(CASE WHEN t >= ms THEN load END) * 900 / 3600000.0 AS tm\n  FROM b, bounds\n  WHERE load IS NOT NULL\n  GROUP BY 1\n)\nSELECT day AS \"Day of month\",\n       SUM(lm) OVER (ORDER BY day) AS \"Last month\",\n       CASE WHEN day <= CAST(strftime('%d', 'now', 'localtime') AS INTEGER)\n            THEN SUM(tm) OVER (ORDER BY day) END AS \"This month\"\nFROM d ORDER BY day",
+          "queryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(((CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) * 1000) / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), gb AS (\n  -- PG&E's own hourly meter history (Green Button import), spread evenly\n  -- over the hour's quarters. Used only where the Eagle has no reading.\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 + o.off AS t,\n         'pge' AS slug,\n         SUM(CASE WHEN se.metric = 'grid_import_wh' THEN s.value ELSE -s.value END)\n           * 3600.0 / MAX(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN (SELECT 0 AS off UNION ALL SELECT 900 UNION ALL SELECT 1800 UNION ALL SELECT 2700) o\n    ON o.off < s.duration_s\n  WHERE se.metric IN ('grid_import_wh', 'grid_export_wh')\n    AND s.ts >= datetime(((CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) * 1000) / 1000 / 3600) * 3600 - 3600, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY s.ts, o.off\n  HAVING COUNT(*) = 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         COALESCE(MAX(CASE WHEN slug = 'eagle' THEN w END),\n                  MAX(CASE WHEN slug = 'pge' THEN w END)) AS grid,\n         MAX(slug = 'eagle') AS live_grid\n  FROM (SELECT t, slug, w FROM raw\n        UNION ALL\n        SELECT t, slug, w FROM gb\n        WHERE t >= ((CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) * 1000) / 1000 / 900) * 900 AND t < (CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000)\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND sl + grid >= 0\n              THEN sl + grid END AS load\n  FROM (SELECT p.*,\n               -- An hourly PG&E reading pairs with the hour's mean solar;\n               -- per-quarter solar against an hourly grid figure would go\n               -- negative whenever production swung within the hour.\n               CASE WHEN live_grid = 1\n                    THEN COALESCE(main, 0) + COALESCE(guest, 0)\n                    ELSE AVG(COALESCE(main, 0) + COALESCE(guest, 0)) OVER (PARTITION BY t / 3600)\n               END AS sl\n        FROM p)\n), bounds AS (\n  SELECT CAST(strftime('%s', 'now', 'localtime', 'start of month', 'utc') AS INTEGER) AS ms,\n         CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) AS ls,\n         CAST(strftime('%s', 'now') AS INTEGER) AS now\n), d AS (\n  SELECT CAST(strftime('%d', t, 'unixepoch', 'localtime') AS INTEGER) AS day,\n         SUM(CASE WHEN t < ms THEN load END) * 900 / 3600000.0 AS lm,\n         SUM(CASE WHEN t >= ms THEN load END) * 900 / 3600000.0 AS tm\n  FROM b, bounds\n  WHERE load IS NOT NULL\n  GROUP BY 1\n)\nSELECT day AS \"Day of month\",\n       SUM(lm) OVER (ORDER BY day) AS \"Last month\",\n       CASE WHEN day <= CAST(strftime('%d', 'now', 'localtime') AS INTEGER)\n            THEN SUM(tm) OVER (ORDER BY day) END AS \"This month\"\nFROM d ORDER BY day"
+        }
+      ],
+      "options": {
+        "xField": "Day of month",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatth",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Day of month"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "This month"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#4B7FD6"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Last month"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#4B7FD6"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    6,
+                    4
+                  ]
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "trend",
+      "id": 20,
+      "title": "Net from PG&E — this month vs. last",
+      "description": "Running kWh total by day of month: this month solid, last month dashed. A falling line means net export.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 74
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(((CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) * 1000) / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), gb AS (\n  -- PG&E's own hourly meter history (Green Button import), spread evenly\n  -- over the hour's quarters. Used only where the Eagle has no reading.\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 + o.off AS t,\n         'pge' AS slug,\n         SUM(CASE WHEN se.metric = 'grid_import_wh' THEN s.value ELSE -s.value END)\n           * 3600.0 / MAX(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN (SELECT 0 AS off UNION ALL SELECT 900 UNION ALL SELECT 1800 UNION ALL SELECT 2700) o\n    ON o.off < s.duration_s\n  WHERE se.metric IN ('grid_import_wh', 'grid_export_wh')\n    AND s.ts >= datetime(((CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) * 1000) / 1000 / 3600) * 3600 - 3600, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY s.ts, o.off\n  HAVING COUNT(*) = 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         COALESCE(MAX(CASE WHEN slug = 'eagle' THEN w END),\n                  MAX(CASE WHEN slug = 'pge' THEN w END)) AS grid,\n         MAX(slug = 'eagle') AS live_grid\n  FROM (SELECT t, slug, w FROM raw\n        UNION ALL\n        SELECT t, slug, w FROM gb\n        WHERE t >= ((CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) * 1000) / 1000 / 900) * 900 AND t < (CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000)\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND sl + grid >= 0\n              THEN sl + grid END AS load\n  FROM (SELECT p.*,\n               -- An hourly PG&E reading pairs with the hour's mean solar;\n               -- per-quarter solar against an hourly grid figure would go\n               -- negative whenever production swung within the hour.\n               CASE WHEN live_grid = 1\n                    THEN COALESCE(main, 0) + COALESCE(guest, 0)\n                    ELSE AVG(COALESCE(main, 0) + COALESCE(guest, 0)) OVER (PARTITION BY t / 3600)\n               END AS sl\n        FROM p)\n), bounds AS (\n  SELECT CAST(strftime('%s', 'now', 'localtime', 'start of month', 'utc') AS INTEGER) AS ms,\n         CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) AS ls,\n         CAST(strftime('%s', 'now') AS INTEGER) AS now\n), d AS (\n  SELECT CAST(strftime('%d', t, 'unixepoch', 'localtime') AS INTEGER) AS day,\n         SUM(CASE WHEN t < ms THEN grid END) * 900 / 3600000.0 AS lm,\n         SUM(CASE WHEN t >= ms THEN grid END) * 900 / 3600000.0 AS tm\n  FROM b, bounds\n  WHERE load IS NOT NULL\n  GROUP BY 1\n)\nSELECT day AS \"Day of month\",\n       SUM(lm) OVER (ORDER BY day) AS \"Last month\",\n       CASE WHEN day <= CAST(strftime('%d', 'now', 'localtime') AS INTEGER)\n            THEN SUM(tm) OVER (ORDER BY day) END AS \"This month\"\nFROM d ORDER BY day",
+          "queryText": "WITH raw AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 AS t,\n         so.slug AS slug,\n         SUM(s.value * s.duration_s) / SUM(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE se.metric IN ('production_w', 'demand_w')\n    AND s.ts >= datetime(((CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) * 1000) / 1000 / 900) * 900, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY 1, 2\n), gb AS (\n  -- PG&E's own hourly meter history (Green Button import), spread evenly\n  -- over the hour's quarters. Used only where the Eagle has no reading.\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / 900) * 900 + o.off AS t,\n         'pge' AS slug,\n         SUM(CASE WHEN se.metric = 'grid_import_wh' THEN s.value ELSE -s.value END)\n           * 3600.0 / MAX(s.duration_s) AS w\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN (SELECT 0 AS off UNION ALL SELECT 900 UNION ALL SELECT 1800 UNION ALL SELECT 2700) o\n    ON o.off < s.duration_s\n  WHERE se.metric IN ('grid_import_wh', 'grid_export_wh')\n    AND s.ts >= datetime(((CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) * 1000) / 1000 / 3600) * 3600 - 3600, 'unixepoch')\n    AND s.ts <  datetime((CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000, 'unixepoch')\n  GROUP BY s.ts, o.off\n  HAVING COUNT(*) = 2\n), p AS (\n  SELECT t,\n         MAX(CASE WHEN slug = 'solaredge' THEN w END) AS main,\n         MAX(CASE WHEN slug = 'envoy' THEN w END) AS guest,\n         COALESCE(MAX(CASE WHEN slug = 'eagle' THEN w END),\n                  MAX(CASE WHEN slug = 'pge' THEN w END)) AS grid,\n         MAX(slug = 'eagle') AS live_grid\n  FROM (SELECT t, slug, w FROM raw\n        UNION ALL\n        SELECT t, slug, w FROM gb\n        WHERE t >= ((CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) * 1000) / 1000 / 900) * 900 AND t < (CAST(strftime('%s', 'now') AS INTEGER) * 1000) / 1000)\n  GROUP BY t\n), b AS (\n  SELECT t, main, guest, grid,\n         COALESCE(main, 0) + COALESCE(guest, 0) AS solar,\n         CASE WHEN grid IS NOT NULL\n               AND (main IS NOT NULL OR COALESCE(guest, 0) < 20)\n               AND sl + grid >= 0\n              THEN sl + grid END AS load\n  FROM (SELECT p.*,\n               -- An hourly PG&E reading pairs with the hour's mean solar;\n               -- per-quarter solar against an hourly grid figure would go\n               -- negative whenever production swung within the hour.\n               CASE WHEN live_grid = 1\n                    THEN COALESCE(main, 0) + COALESCE(guest, 0)\n                    ELSE AVG(COALESCE(main, 0) + COALESCE(guest, 0)) OVER (PARTITION BY t / 3600)\n               END AS sl\n        FROM p)\n), bounds AS (\n  SELECT CAST(strftime('%s', 'now', 'localtime', 'start of month', 'utc') AS INTEGER) AS ms,\n         CAST(strftime('%s', 'now', 'localtime', 'start of month', '-1 month', 'utc') AS INTEGER) AS ls,\n         CAST(strftime('%s', 'now') AS INTEGER) AS now\n), d AS (\n  SELECT CAST(strftime('%d', t, 'unixepoch', 'localtime') AS INTEGER) AS day,\n         SUM(CASE WHEN t < ms THEN grid END) * 900 / 3600000.0 AS lm,\n         SUM(CASE WHEN t >= ms THEN grid END) * 900 / 3600000.0 AS tm\n  FROM b, bounds\n  WHERE load IS NOT NULL\n  GROUP BY 1\n)\nSELECT day AS \"Day of month\",\n       SUM(lm) OVER (ORDER BY day) AS \"Last month\",\n       CASE WHEN day <= CAST(strftime('%d', 'now', 'localtime') AS INTEGER)\n            THEN SUM(tm) OVER (ORDER BY day) END AS \"This month\"\nFROM d ORDER BY day"
+        }
+      ],
+      "options": {
+        "xField": "Day of month",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatth",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Day of month"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "This month"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#7C8CA8"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Last month"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#7C8CA8"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    6,
+                    4
+                  ]
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 }

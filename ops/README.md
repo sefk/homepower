@@ -89,12 +89,19 @@ state Grafana owns and git doesn't.
   production over all backfilled history
 - **Sinks** — where it goes: house load (derived as solar + grid) and
   export, the always-on floor, the 4–9pm share, a load histogram, a
-  typical-day profile and an hour-by-day heatmap of house load. Appliances and the car get slices here as their
-  collectors arrive
+  typical-day profile and an hour-by-day heatmap of house load; then the
+  current through the 200 A service (watts over a nominal 240 V, peak per
+  point) against the main and its 160 A continuous rating, exports dipping
+  below zero. Appliances and the car get slices here as their collectors
+  arrive
 - **Sources and Sinks** — the two together: solar→house, solar→grid and
   grid→house energy, self-sufficiency and self-use, an energy-flow Sankey
   (kWh from each array and the grid to the house and back out), a mirrored balance
-  chart, daily balance and a time-of-use cost estimate
+  chart, net use (import minus export, bars sized to the picked range),
+  daily balance and a time-of-use cost estimate. A **Compare** row below
+  ignores the picker: solar, house use and net by month year over year
+  (this year in colour, last year lighter, earlier years grey), and this
+  month to date against last month as a table and running totals
 - **Live Power** (also the home dashboard) — solar vs. grid at native
   resolution, 10s refresh, today's kWh
 - **Data Health** — sample freshness, coverage percentage, poll outcomes
