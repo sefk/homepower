@@ -5,7 +5,7 @@ from django.db import migrations
 MILESTONES = [
     (date(2024, 11, 15), "Electric dryer installed"),
     (date(2025, 9, 1), "Sef retired"),
-    (date(2026, 9, 21), "Electric heat pump installed"),
+    (date(2026, 9, 21), "Heat pump hot water heater"),
 ]
 
 

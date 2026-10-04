@@ -20,7 +20,7 @@ def run(*args):
 class TestMilestoneCommand:
     def test_seeded_by_migration(self):
         labels = list(Milestone.objects.values_list("label", flat=True))
-        assert labels == ["Electric dryer installed", "Sef retired", "Electric heat pump installed"]
+        assert labels == ["Electric dryer installed", "Sef retired", "Heat pump hot water heater"]
 
     def test_add_list_remove(self):
         run("add", "2027-03-01", "Battery installed")
