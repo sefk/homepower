@@ -132,6 +132,20 @@ python3 ops/grafana/check_panels.py    # every query, against the live instance
 A broken query renders as an empty panel, which looks exactly like a data
 gap — hence the checker.
 
+Milestones — dated changes like a new appliance — show as dashed markers
+on every time-axis chart (label on hover; the **Milestones** toggle hides
+them). They live in the `core_milestone` table, so add or remove them
+from the command line, not the dashboards:
+
+```sh
+uv run python manage.py milestone list
+uv run python manage.py milestone add 2027-03-01 "Battery installed"
+uv run python manage.py milestone remove 4
+```
+
+The year-over-year and month-over-month panels have no time axis, so
+they can't carry markers.
+
 ## macOS Local Network privacy (one-time)
 
 LAN access is granted per-binary on modern macOS. Your terminal has it,

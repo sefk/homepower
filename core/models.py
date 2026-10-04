@@ -108,3 +108,19 @@ class CollectorRun(models.Model):
     def __str__(self):
         status = {True: "ok", False: "fail", None: "?"}[self.ok]
         return f"{self.source.slug} {self.started:%m-%d %H:%M:%S} {status}"
+
+
+class Milestone(models.Model):
+    """A dated change in how the house uses energy (a new appliance, a
+    schedule change), drawn as a marker on the Grafana time charts so a
+    step in the data has its cause beside it. Managed with
+    `manage.py milestone`."""
+
+    date = models.DateField()  # local calendar day
+    label = models.CharField(max_length=200)
+
+    class Meta:
+        ordering = ["date"]
+
+    def __str__(self):
+        return f"{self.date} {self.label}"

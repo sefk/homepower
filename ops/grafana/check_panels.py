@@ -88,6 +88,16 @@ def main():
             failures += not check(
                 f"var {variable['name']}", variable["datasource"], variable["query"]
             )
+        for annotation in dashboard.get("annotations", {}).get("list", []):
+            target = annotation.get("target")
+            if target and "rawQueryText" in target:
+                failures += not check(
+                    f"annotation {annotation['name']}",
+                    target["datasource"],
+                    target["rawQueryText"],
+                    target["queryType"],
+                    target["timeColumns"],
+                )
         for panel in dashboard["panels"]:
             for target in panel.get("targets", []):
                 failures += not check(

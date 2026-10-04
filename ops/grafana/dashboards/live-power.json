@@ -65,6 +65,33 @@
       }
     ]
   },
+  "annotations": {
+    "list": [
+      {
+        "name": "Milestones",
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "homepower-sqlite"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "#8A8F98",
+        "target": {
+          "refId": "Anno",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [
+            "time"
+          ],
+          "rawQueryText": "SELECT CAST(strftime('%s', m.date, 'utc') AS INTEGER) AS time,\n       m.label AS text\nFROM core_milestone m\nWHERE m.date >= date($__from / 1000, 'unixepoch', 'localtime', '-1 day')\n  AND m.date <= date($__to / 1000, 'unixepoch', 'localtime')\nORDER BY m.date",
+          "queryText": "SELECT CAST(strftime('%s', m.date, 'utc') AS INTEGER) AS time,\n       m.label AS text\nFROM core_milestone m\nWHERE m.date >= date($__from / 1000, 'unixepoch', 'localtime', '-1 day')\n  AND m.date <= date($__to / 1000, 'unixepoch', 'localtime')\nORDER BY m.date"
+        }
+      }
+    ]
+  },
   "panels": [
     {
       "type": "stat",
