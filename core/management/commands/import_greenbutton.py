@@ -23,7 +23,7 @@ The same download carries natural-gas files: daily rows with a
 gas_wh, converted to Wh so every energy series shares one unit (the
 dashboards turn it back into therms). Nothing else writes gas, so
 there is no collector behind that Source.
-update_or_create on (series, ts) makes re-import idempotent; coverage is
+core.history.replace_interval makes re-import idempotent; coverage is
 recorded BACKFILLED per row, and core.coverage.record_coverage merges
 touching same-state spans into one, so a whole file becomes one span
 per contiguous run without this command doing that bookkeeping itself.
@@ -35,12 +35,12 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from django.db.models import Max
 from django.utils import timezone
 
+from collectors import pge
 from collectors.eagle import ensure_source
-from core.coverage import clear_coverage, record_coverage
-from core.models import CoverageSpan, Sample, Series, Source
+from core.history import replace_interval
+from core.models import Series
 
 # PG&E's DATE + TIME columns, tried in order. Older exports write
 # 08/01/2025; current ones write 2025-08-01.
@@ -57,9 +57,6 @@ _INCLUSIVE_END_MINUTE_STEP = 15
 # No END TIME column and only one row in the file: nothing to infer
 # spacing from. Picked as a plausible hourly default rather than left 0.
 _FALLBACK_DURATION_S = 3600
-# PG&E bills the US therm: 100,000 BTU.
-WH_PER_THERM = 29_307.1
-GAS_SOURCE_SLUG = "pge_gas"
 
 
 @dataclass
@@ -96,20 +93,6 @@ def _find_header(rows: list[list[str]]) -> tuple[int, list[str]] | None:
 def _is_gas(fields: list[str]) -> bool:
     """Gas exports name their unit in the USAGE header: "USAGE (THERMS)"."""
     return any(f.startswith("USAGE") and "THERM" in f for f in fields)
-
-
-def ensure_gas_source() -> Source:
-    source, _ = Source.objects.get_or_create(
-        slug=GAS_SOURCE_SLUG,
-        defaults={
-            "name": "PG&E Gas",
-            "kind": Source.Kind.GAS,
-            # Only ever imported by hand, a day at a time.
-            "poll_interval_s": 86400,
-            "native_resolution_s": 86400,
-        },
-    )
-    return source
 
 
 def _col(fields: list[str], name: str) -> int | None:
@@ -186,7 +169,7 @@ class Command(BaseCommand):
         gas = _is_gas(fields)
         if gas and "gas_wh" not in series_by_metric:
             series_by_metric["gas_wh"], _ = Series.objects.get_or_create(
-                source=ensure_gas_source(), metric="gas_wh", defaults={"unit": "Wh"}
+                source=pge.ensure_source(), metric="gas_wh", defaults={"unit": "Wh"}
             )
 
         date_idx = _col(fields, "DATE")
@@ -262,7 +245,7 @@ class Command(BaseCommand):
                     therms = float(raw[usage_idx])
                     if therms < 0:
                         raise ValueError("negative gas usage")
-                    values.append(("gas_wh", therms * WH_PER_THERM))
+                    values.append(("gas_wh", therms * pge.WH_PER_THERM))
                 elif usage_idx is not None:
                     # Single-column USAGE only tells us one direction per
                     # row, but grid_hourly_wh takes the coverage of BOTH
@@ -364,93 +347,12 @@ class Command(BaseCommand):
         ts_min = ts_max = None
         with transaction.atomic():
             for row in parsed:
-                # Adding a timedelta to an aware zoneinfo datetime silently
-                # drops fold and can reinterpret the result at the wrong
-                # UTC offset near a DST edge (REVIEW-INSIGHTS: convert to
-                # UTC before duration math) — so convert first, then add.
-                ts_utc = row.ts.astimezone(dt_timezone.utc)
-                new_end = ts_utc + timedelta(seconds=row.duration_s)
                 for metric, wh in row.values:
                     series = series_by_metric[metric]
-
-                    # A correction can land at a DIFFERENT ts than the row
-                    # it supersedes -- e.g. an hourly reading correcting
-                    # one hour that used to be folded into an earlier
-                    # daily-granularity row. update_or_create is keyed on
-                    # exact (series, ts), so it can't find that older
-                    # sample; left alone, it would still be there at its
-                    # own ts and _clipped_energy_wh would double-count it
-                    # (its own full proportional slice, plus the new
-                    # row's) while coverage looked intact. Delete every
-                    # OTHER sample on this series whose interval overlaps
-                    # this row's, and retract the coverage IT justified
-                    # over its own full interval, not just the overlapping
-                    # sliver -- a daily reading is one atomic value, so
-                    # correcting a piece of it invalidates the whole
-                    # thing; the untouched hours must go back to unknown,
-                    # not keep reading as known with nothing behind them.
-                    #
-                    # Scoped to grid_import_wh/grid_export_wh/gas_wh only:
-                    # this importer is their exclusive writer (no collector
-                    # ever touches these metrics), so nothing here
-                    # risks a collector's own LIVE data. Lookback for
-                    # candidates uses this series' own max sample
-                    # duration, same reasoning as _clipped_energy_wh's
-                    # dynamic lookback (core/aggregate.py) -- one cheap
-                    # aggregate per row/metric at our volumes.
-                    max_duration = (
-                        Sample.objects.filter(series=series)
-                        .aggregate(Max("duration_s"))["duration_s__max"]
-                        or 0
-                    )
-                    overlapping = Sample.objects.filter(
-                        series=series,
-                        ts__lt=new_end,
-                        ts__gte=ts_utc - timedelta(seconds=max_duration),
-                    ).exclude(ts=row.ts)
-                    for other in overlapping:
-                        other_end = other.ts + timedelta(seconds=other.duration_s)
-                        if other_end > ts_utc:
-                            clear_coverage(
-                                series, other.ts, other_end, CoverageSpan.State.BACKFILLED
-                            )
-                            other.delete()
-
-                    # Same-ts case: a corrected re-import (e.g. an
-                    # hour-long row replaced by the real 15-minute one)
-                    # fixes the Sample via update_or_create below, but
-                    # stale BACKFILLED coverage the OLD duration justified
-                    # would otherwise survive past the new, shorter one.
-                    # clear_coverage revises BACKFILLED knowledge for
-                    # exactly [ts, end) this sample claims — the new end,
-                    # or the old one if it reached further — trimming or
-                    # splitting spans that extend beyond that rather than
-                    # deleting them outright. That keeps the retraction
-                    # scoped to this one reading: a one-row correction
-                    # inside a month-long backfilled span (itself built
-                    # from many touching rows) doesn't erase the rest of
-                    # that month, since every other row's own [ts, end) is
-                    # untouched. Never touches LIVE, which is the
-                    # collector's own knowledge, not this command's.
-                    existing = (
-                        Sample.objects.filter(series=series, ts=row.ts)
-                        .values_list("duration_s", flat=True)
-                        .first()
-                    )
-                    clear_end = new_end
-                    if existing is not None:
-                        clear_end = max(clear_end, ts_utc + timedelta(seconds=existing))
-                    clear_coverage(series, ts_utc, clear_end, CoverageSpan.State.BACKFILLED)
-
-                    _, was_created = Sample.objects.update_or_create(
-                        series=series,
-                        ts=row.ts,
-                        defaults={"duration_s": row.duration_s, "value": wh},
-                    )
-                    created += was_created
-                    updated += not was_created
+                    created_now = replace_interval(series, row.ts, row.duration_s, wh)
+                    created += created_now
+                    updated += not created_now
                     totals[metric] = totals.get(metric, 0.0) + wh
-                    record_coverage(series, ts_utc, new_end, CoverageSpan.State.BACKFILLED)
                 ts_min = row.ts if ts_min is None else min(ts_min, row.ts)
                 ts_max = row.ts if ts_max is None else max(ts_max, row.ts)
 

@@ -9,6 +9,7 @@ from django.conf import settings
 
 from .base import Collector
 from .envoy import EnvoyCollector
+from .pge import PgeGasCollector
 from .solaredge import SolarEdgeCollector
 from .solaredge_auth import SolarEdgeAuth
 from .tesla import TeslaCollector
@@ -63,4 +64,14 @@ def enabled_collectors() -> list[Collector]:
         )
     else:
         logger.warning("tesla: no client id/refresh token in .env, collector disabled")
+    if settings.PGE_USERNAME and settings.PGE_PASSWORD:
+        collectors.append(
+            PgeGasCollector(
+                username=settings.PGE_USERNAME,
+                password=settings.PGE_PASSWORD,
+                login_file=settings.PGE_LOGIN_FILE,
+            )
+        )
+    else:
+        logger.warning("pge_gas: no PG&E login in .env, collector disabled")
     return collectors

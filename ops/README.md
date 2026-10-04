@@ -106,8 +106,7 @@ state Grafana owns and git doesn't.
   resolution, 10s refresh, today's kWh
 - **Gas** — therms over the range (daily, weekly or monthly bars by
   range), summer baseline, and gas by month year over year. Daily
-  readings from Green Button imports only, so it lags until the next
-  import
+  readings, 1–2 days behind (PG&E's posting lag)
 - **Data Health** — sample freshness, coverage percentage, poll outcomes
 - **Energy** — kWh per hour and per local day, with the observed-time panel
   that says how much of each bucket was actually seen
@@ -196,6 +195,29 @@ remove with `uploader_delete` + `<provider>homepower</provider>`.
 Command names and parameters were recovered from the Rainforest cloud
 portal's JS bundle; they are not publicly documented.
 
+## PG&E gas (daily, automatic)
+
+The `pge_gas` collector signs in to pge.com with `PGE_USERNAME` /
+`PGE_PASSWORD` (through the [opower][opower] library Home Assistant uses)
+every 6 hours and re-reads the last 30 days of daily gas use, so late or
+corrected days fill in by themselves. PG&E posts each day 1–2 days late.
+
+PG&E asks for a texted or emailed code the first time a device signs in.
+Do that once, interactively:
+
+```sh
+uv run python manage.py pge_auth
+launchctl kickstart -k gui/$(id -u)/com.sefk.homepower
+```
+
+It saves the remembered-device cookie to `var/pge_login.json` and says
+when PG&E means it to expire. When PG&E forgets it, `/health/` shows
+`pge_gas` failing with "run `manage.py pge_auth`" — rerun it, no restart
+needed. It uses the website's login rather than an official API, so a
+pge.com change can break it until opower catches up (`uv lock
+--upgrade-package opower`); the Green Button import below still works
+for gaps.
+
 ## Tesla Fleet API (EV source)
 
 See [tesla-setup.md](tesla-setup.md) — developer-app registration,
@@ -229,9 +251,10 @@ the Eagle was installed shows as hourly steps.
 
 Gas lands as daily `gas_wh` on its own `pge_gas` Source (kind `gas`),
 converted at 29,307.1 Wh per therm so it shares a unit with everything
-else; the Gas dashboard turns it back into therms. There is no live gas
-feed, so the Gas dashboard is only as current as the last import, and
-Data Health will always show `pge_gas` as stale.
+else; the Gas dashboard turns it back into therms. The `pge_gas`
+collector writes the same series the same way, so a hand import and a
+poll of the same day agree; imports are now only for history older than
+its 30-day window.
 
 ## Notes
 
@@ -245,3 +268,4 @@ Data Health will always show `pge_gas` as stale.
 
 [sankey]: https://grafana.com/grafana/plugins/netsage-sankey-panel/
 [heatmap]: https://grafana.com/grafana/plugins/marcusolsson-hourly-heatmap-panel/
+[opower]: https://github.com/tronikos/opower

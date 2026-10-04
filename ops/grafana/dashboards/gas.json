@@ -1,7 +1,7 @@
 {
   "uid": "homepower-gas",
   "title": "Gas",
-  "description": "Natural gas from PG&E's daily meter readings (Green Button exports).",
+  "description": "Natural gas from PG&E's daily meter readings.",
   "tags": [
     "homepower"
   ],
@@ -326,7 +326,7 @@
       "type": "stat",
       "id": 6,
       "title": "Data through",
-      "description": "Last day PG&E has reported. Gas comes only from Green Button exports imported by hand (ops/README.md), so this lags until the next import.",
+      "description": "Last day PG&E has reported. The pge_gas collector checks every 6 hours; PG&E posts a day 1–2 days late. Much older than that means the collector needs `manage.py pge_auth` (see /health/).",
       "gridPos": {
         "h": 4,
         "w": 4,

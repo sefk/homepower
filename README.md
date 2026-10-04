@@ -36,6 +36,8 @@ SOLAREDGE_SITE_ID=...              # number in the portal URL after signing in
 TESLA_CLIENT_ID=...                # see ops/tesla-setup.md
 TESLA_CLIENT_SECRET=...
 TESLA_REFRESH_TOKEN=...            # from `manage.py tesla_auth` (after `tesla_register`)
+PGE_USERNAME=you@example.com       # pge.com login, for gas; then run `manage.py pge_auth` once
+PGE_PASSWORD=...
 # optional overrides:
 # ENVOY_HOST=10.10.0.222
 # HOMEPOWER_PORT=8425

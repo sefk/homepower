@@ -110,6 +110,14 @@ SOLAREDGE_PASSWORD = os.environ.get("SOLAREDGE_PASSWORD", "")
 SOLAREDGE_SITE_ID = os.environ.get("SOLAREDGE_SITE_ID", "")
 SOLAREDGE_TOKEN_FILE = VAR_DIR / "solaredge_token.json"
 
+# PG&E (gas). pge.com login, read through the opower library. PG&E texts
+# or emails a code on first sign-in; `manage.py pge_auth` takes it once and
+# saves the remembered-device cookie to PGE_LOGIN_FILE. Leave blank to
+# disable the collector.
+PGE_USERNAME = os.environ.get("PGE_USERNAME", "")
+PGE_PASSWORD = os.environ.get("PGE_PASSWORD", "")
+PGE_LOGIN_FILE = VAR_DIR / "pge_login.json"
+
 # Tesla Fleet API (EV, Model S). Refresh token minted by `manage.py
 # tesla_auth`; see ops/tesla-setup.md for the developer-app registration
 # and public-key hosting steps. Leave TESLA_CLIENT_ID/TESLA_REFRESH_TOKEN
