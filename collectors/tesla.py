@@ -194,8 +194,9 @@ class TeslaCollector(Collector):
     async def _discover_vin(self) -> str:
         # One car on the account (the request budget assumes as much),
         # so its first vehicle is the car.
-        data = await self._call("could not list vehicles", self._client.vehicles.list)
-        vehicles = data.get("response") or []
+        data = await self._call("could not list vehicles", self._client.products)
+        # Products are vehicles and energy sites; only vehicles have a VIN.
+        vehicles = [p for p in data.get("response") or [] if p.get("vin")]
         if not vehicles:
             raise RuntimeError("tesla: account has no vehicles")
         return vehicles[0]["vin"]

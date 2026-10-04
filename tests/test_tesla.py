@@ -3,7 +3,7 @@ budgeted adaptive polling, charge-energy deltas, refresh-token
 persistence, and registry gating.
 
 Fakes the tesla-fleet-api client at the object level (session/region/
-client_id/client_secret/refresh_token in, vehicles.list()/
+client_id/client_secret/refresh_token in, products()/
 vehicles.createFleet(vin).vehicle()/.vehicle_data() out) so these tests exercise
 our side only -- what becomes a Reading, and how a real
 BaseException-subclassing vendor error (tesla-fleet-api's own choice,
@@ -69,10 +69,6 @@ class FakeVehicles(dict):
         self[vin] = vehicle
         return vehicle
 
-    async def list(self):
-        self._client.calls.append("list")
-        return {"response": self._client.vehicle_list}
-
 
 class FakeTeslaClient:
     """Stands in for tesla_fleet_api.TeslaFleetOAuth."""
@@ -87,13 +83,18 @@ class FakeTeslaClient:
             "charge_state": charge_state(),
             "drive_state": drive_state(),
         }
-        self.vehicle_list = [{"vin": "5YJSA1E2XKF000001"}]
+        # Products: vehicles plus any energy sites, which have no VIN.
+        self.vehicle_list = [{"energy_site_id": 1}, {"vin": "5YJSA1E2XKF000001"}]
         self.state = "online"
         self.calls: list[str] = []
         self.endpoints = None
         self.vehicle_data_errors: list[Exception] = []
         self._rotate_next = None
         self.vehicles = FakeVehicles(self)
+
+    async def products(self):
+        self.calls.append("list")
+        return {"response": self.vehicle_list}
 
     def rotate_refresh_token(self):
         if self._rotate_next:
@@ -390,3 +391,22 @@ class TestRequestBudget:
         collector, holder = make_collector(tmp_path, vin=None)
         setup(collector)
         assert json.loads((tmp_path / "tesla_usage.json").read_text())["requests"] == 1
+
+
+def test_fakes_only_use_methods_the_real_library_has():
+    """The fakes once offered vehicles.list(), which tesla-fleet-api 1.8
+    doesn't have: tests passed while the real collector failed setup.
+    Every method a fake offers must exist on the class it stands in for."""
+    from tesla_fleet_api import TeslaFleetOAuth
+    from tesla_fleet_api.tesla.vehicle.fleet import VehicleFleet
+    from tesla_fleet_api.tesla.vehicle.vehicles import Vehicles
+
+    for fake, real in (
+        (FakeTeslaClient, TeslaFleetOAuth),
+        (FakeVehicles, Vehicles),
+        (FakeVehicle, VehicleFleet),
+    ):
+        for name in vars(fake):
+            if not name.startswith("_") and callable(getattr(fake, name)) and name != "rotate_refresh_token":
+                assert hasattr(real, name), f"{fake.__name__}.{name} not on {real.__name__}"
+
