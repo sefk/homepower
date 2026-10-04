@@ -104,6 +104,10 @@ state Grafana owns and git doesn't.
   month to date against last month as a table and running totals
 - **Live Power** (also the home dashboard) — solar vs. grid at native
   resolution, 10s refresh, today's kWh
+- **Gas** — therms over the range (daily, weekly or monthly bars by
+  range), summer baseline, and gas by month year over year. Daily
+  readings from Green Button imports only, so it lags until the next
+  import
 - **Data Health** — sample freshness, coverage percentage, poll outcomes
 - **Energy** — kWh per hour and per local day, with the observed-time panel
   that says how much of each bucket was actually seen
@@ -184,7 +188,7 @@ See [tesla-setup.md](tesla-setup.md) — developer-app registration,
 public-key hosting, partner-account registration, and the
 `manage.py tesla_auth` refresh-token bootstrap.
 
-## Green Button backfill (grid history before/beyond the Eagle 3)
+## Green Button backfill (grid history before/beyond the Eagle 3, and gas)
 
 PG&E's own meter history, for filling gaps the Eagle 3 didn't cover or
 seeding data from before it was installed:
@@ -192,22 +196,28 @@ seeding data from before it was installed:
 **pge.com → My Usage → Energy Usage Details → the green "Download my
 data" button → Export usage for a range → CSV.** One export covers at
 most about a year, so step backwards a year at a time. The zip holds
-electric *and* gas files; import only the `pge_electric_usage_*` ones —
-the importer doesn't tell gas from electric.
+electric *and* gas files; import both — the importer tells them apart by
+the `USAGE (therms)` header.
 
 macOS keeps the terminal out of `~/Downloads` unless it has been granted
 access, so copy the files somewhere readable (e.g. `.tmp/pge/`) first:
 
 ```sh
-uv run python manage.py import_greenbutton .tmp/pge/pge_electric_usage_*.csv
+uv run python manage.py import_greenbutton .tmp/pge/pge_*_usage_*.csv
 ```
 
-Lands as hourly `grid_import_wh` / `grid_export_wh` on the `eagle`
+Electric lands as hourly `grid_import_wh` / `grid_export_wh` on the `eagle`
 Source, coverage recorded `backfilled`. Re-running the same file is
 safe — rows upsert on (series, timestamp). The Grafana dashboards use it
 wherever the Eagle has no reading, spread evenly over each hour's
 quarters and paired with that hour's mean solar, so house load before
 the Eagle was installed shows as hourly steps.
+
+Gas lands as daily `gas_wh` on its own `pge_gas` Source (kind `gas`),
+converted at 29,307.1 Wh per therm so it shares a unit with everything
+else; the Gas dashboard turns it back into therms. There is no live gas
+feed, so the Gas dashboard is only as current as the last import, and
+Data Health will always show `pge_gas` as stale.
 
 ## Notes
 

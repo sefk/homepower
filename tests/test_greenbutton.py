@@ -596,3 +596,58 @@ class TestCurrentExportFormat:
         # Whole hours touch, so the three rows are one unbroken span.
         series = Series.objects.get(metric="grid_import_wh")
         assert uncovered(series, utc(2025, 8, 2, 5, 0), utc(2025, 8, 2, 8, 0)) == []
+
+
+# PG&E's natural-gas export: daily rows, therms, inclusive 23:59 END TIME.
+# 2025-11-02 is the fall-back Sunday, a 25-hour local day.
+GAS_CSV = """Name,Sef Kloninger
+Address,"635 Central Ave, CA"
+Account Number,1234567890
+Service,1234567890
+
+TYPE,DATE,START TIME,END TIME,USAGE (therms),COST,NOTES
+Natural gas usage,2025-11-01,00:00,23:59,1.05,$2.79
+Natural gas usage,2025-11-02,00:00,23:59,0.00,$0.00
+Natural gas usage,2025-11-03,00:00,23:59,2.50,$6.40
+"""
+
+
+@pytest.mark.django_db
+class TestNaturalGas:
+    def test_gas_goes_to_its_own_source_not_the_grid(self, tmp_path):
+        call_command("import_greenbutton", _write(tmp_path, "gas.csv", GAS_CSV))
+
+        assert not Sample.objects.filter(series__source__slug="eagle").exists()
+        source = Source.objects.get(slug="pge_gas")
+        assert source.kind == Source.Kind.GAS
+        series = Series.objects.get(source=source, metric="gas_wh")
+        assert series.unit == "Wh"
+
+        values = [s.value for s in Sample.objects.filter(series=series).order_by("ts")]
+        assert values == pytest.approx([1.05 * 29307.1, 0.0, 2.50 * 29307.1])
+
+    def test_daily_rows_span_the_local_day_including_dst(self, tmp_path):
+        call_command("import_greenbutton", _write(tmp_path, "gas.csv", GAS_CSV))
+
+        rows = list(Sample.objects.filter(series__metric="gas_wh").order_by("ts"))
+        assert rows[0].ts == utc(2025, 11, 1, 7, 0)  # 00:00 PDT
+        assert [r.duration_s for r in rows] == [86400, 90000, 86400]
+
+        spans = CoverageSpan.objects.filter(series__metric="gas_wh")
+        assert spans.count() == 1
+        assert spans.get().end == utc(2025, 11, 4, 8, 0)  # 00:00 PST
+
+    def test_gas_and_electric_files_in_one_run(self, tmp_path):
+        call_command(
+            "import_greenbutton",
+            _write(tmp_path, "gas.csv", GAS_CSV),
+            _write(tmp_path, "usage.csv", SINGLE_USAGE_CSV),
+        )
+        assert Sample.objects.filter(series__metric="gas_wh").count() == 3
+        assert Sample.objects.filter(series__metric="grid_import_wh").count() == 2
+
+    def test_idempotent_reimport(self, tmp_path):
+        path = _write(tmp_path, "gas.csv", GAS_CSV)
+        call_command("import_greenbutton", path)
+        call_command("import_greenbutton", path)
+        assert Sample.objects.filter(series__metric="gas_wh").count() == 3

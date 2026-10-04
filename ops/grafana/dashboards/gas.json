@@ -1,0 +1,521 @@
+{
+  "uid": "homepower-gas",
+  "title": "Gas",
+  "description": "Natural gas from PG&E's daily meter readings (Green Button exports).",
+  "tags": [
+    "homepower"
+  ],
+  "timezone": "browser",
+  "editable": false,
+  "schemaVersion": 39,
+  "refresh": "",
+  "time": {
+    "from": "now-1y",
+    "to": "now"
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "homepower"
+      ],
+      "title": "Home power",
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": true,
+      "icon": "external link"
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "id": 1,
+      "title": "Gas used",
+      "description": "Therms over the selected range, from PG&E's daily readings.",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "SELECT SUM(s.value) / 29307.1 AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'pge_gas' AND se.metric = 'gas_wh'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')",
+          "queryText": "SELECT SUM(s.value) / 29307.1 AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'pge_gas' AND se.metric = 'gas_wh'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: therms",
+          "decimals": 1,
+          "noValue": "no data",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#6C5BB5"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "id": 2,
+      "title": "Average per day",
+      "description": "Mean therms per day over the days PG&E reported in the range.",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "SELECT AVG(s.value) / 29307.1 AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'pge_gas' AND se.metric = 'gas_wh'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')",
+          "queryText": "SELECT AVG(s.value) / 29307.1 AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'pge_gas' AND se.metric = 'gas_wh'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: therms",
+          "decimals": 2,
+          "noValue": "no data",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#6C5BB5"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "id": 3,
+      "title": "Most in one day",
+      "description": "The highest single day in the range.",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "SELECT MAX(s.value) / 29307.1 AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'pge_gas' AND se.metric = 'gas_wh'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')",
+          "queryText": "SELECT MAX(s.value) / 29307.1 AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'pge_gas' AND se.metric = 'gas_wh'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: therms",
+          "decimals": 2,
+          "noValue": "no data",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#6C5BB5"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "id": 4,
+      "title": "Summer baseline",
+      "description": "Average therms per day over the latest June–August on record — what the house burns with no heating (water, cooking). Ignores the time picker.",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "SELECT SUM(s.value) / 29307.1 / COUNT(*) AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'pge_gas' AND se.metric = 'gas_wh'\n  AND CAST(strftime('%m', s.ts, 'localtime') AS INTEGER) BETWEEN 6 AND 8\n  AND strftime('%Y', s.ts, 'localtime') = (\n    SELECT MAX(strftime('%Y', s.ts, 'localtime')) FROM core_sample s JOIN core_series se ON se.id = s.series_id JOIN core_source so ON so.id = se.source_id WHERE so.slug = 'pge_gas' AND se.metric = 'gas_wh'\n      AND CAST(strftime('%m', s.ts, 'localtime') AS INTEGER) = 8)",
+          "queryText": "SELECT SUM(s.value) / 29307.1 / COUNT(*) AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'pge_gas' AND se.metric = 'gas_wh'\n  AND CAST(strftime('%m', s.ts, 'localtime') AS INTEGER) BETWEEN 6 AND 8\n  AND strftime('%Y', s.ts, 'localtime') = (\n    SELECT MAX(strftime('%Y', s.ts, 'localtime')) FROM core_sample s JOIN core_series se ON se.id = s.series_id JOIN core_source so ON so.id = se.source_id WHERE so.slug = 'pge_gas' AND se.metric = 'gas_wh'\n      AND CAST(strftime('%m', s.ts, 'localtime') AS INTEGER) = 8)"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: therms",
+          "decimals": 2,
+          "noValue": "no data",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#6C5BB5"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "id": 5,
+      "title": "As kWh",
+      "description": "The range's gas as kWh (1 therm = 29.3 kWh), to set beside the house's electric use.",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "SELECT SUM(s.value) / 1000.0 AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'pge_gas' AND se.metric = 'gas_wh'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')",
+          "queryText": "SELECT SUM(s.value) / 1000.0 AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'pge_gas' AND se.metric = 'gas_wh'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatth",
+          "decimals": 0,
+          "noValue": "no data",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#6C5BB5"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "id": 6,
+      "title": "Data through",
+      "description": "Last day PG&E has reported. Gas comes only from Green Button exports imported by hand (ops/README.md), so this lags until the next import.",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "SELECT CAST(strftime('%s', MAX(s.ts)) AS INTEGER) * 1000 AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'pge_gas' AND se.metric = 'gas_wh'",
+          "queryText": "SELECT CAST(strftime('%s', MAX(s.ts)) AS INTEGER) * 1000 AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'pge_gas' AND se.metric = 'gas_wh'"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "time: YYYY-MM-DD",
+          "decimals": 0,
+          "noValue": "no data",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#6C5BB5"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 7,
+      "title": "Gas use over the range",
+      "description": "Therms per day for ranges up to a month, per week (Monday start) up to 6 months, per month beyond that. The meter counts in whole units of about one therm, so day by day a quiet stretch reads 0, 0, 0, 1 rather than a steady trickle — weeks smooth that out. Days PG&E didn't report are left blank, not zero.",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "time series",
+          "timeColumns": [
+            "time"
+          ],
+          "rawQueryText": "SELECT CASE WHEN $__to - $__from <= 31 * 86400000\n            THEN CAST(strftime('%s', datetime(s.ts, 'localtime', 'start of day'), 'utc') AS INTEGER)\n            WHEN $__to - $__from <= 183 * 86400000\n            THEN CAST(strftime('%s', datetime(s.ts, 'localtime', 'start of day', 'weekday 0', '-6 days'), 'utc') AS INTEGER)\n            ELSE CAST(strftime('%s', datetime(s.ts, 'localtime', 'start of month'), 'utc') AS INTEGER)\n       END AS time,\n       SUM(s.value) / 29307.1 AS \"Gas\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'pge_gas' AND se.metric = 'gas_wh'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')\nGROUP BY 1\nORDER BY 1",
+          "queryText": "SELECT CASE WHEN $__to - $__from <= 31 * 86400000\n            THEN CAST(strftime('%s', datetime(s.ts, 'localtime', 'start of day'), 'utc') AS INTEGER)\n            WHEN $__to - $__from <= 183 * 86400000\n            THEN CAST(strftime('%s', datetime(s.ts, 'localtime', 'start of day', 'weekday 0', '-6 days'), 'utc') AS INTEGER)\n            ELSE CAST(strftime('%s', datetime(s.ts, 'localtime', 'start of month'), 'utc') AS INTEGER)\n       END AS time,\n       SUM(s.value) / 29307.1 AS \"Gas\"\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'pge_gas' AND se.metric = 'gas_wh'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')\nGROUP BY 1\nORDER BY 1"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: therms",
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#6C5BB5"
+          },
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 70,
+            "showPoints": "never",
+            "spanNulls": false,
+            "gradientMode": "none",
+            "barAlignment": 1
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "barchart",
+      "id": 8,
+      "title": "Gas by month — year over year",
+      "description": "Therms in each calendar month, one bar per year, every year on record. This year in full colour, last year lighter, earlier years grey. The first month and the current month are partial, and a month with unreported days reads low. Ignores the time picker.",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "WITH agg AS (\n  SELECT CAST(strftime('%m', s.ts, 'localtime') AS INTEGER) AS m,\n         strftime('%Y', s.ts, 'localtime') AS year,\n         SUM(s.value) / 29307.1 AS therms\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE so.slug = 'pge_gas' AND se.metric = 'gas_wh'\n  GROUP BY 1, 2\n), months(m) AS (\n  SELECT 1 UNION ALL SELECT m + 1 FROM months WHERE m < 12\n)\nSELECT substr('JanFebMarAprMayJunJulAugSepOctNovDec', (months.m - 1) * 3 + 1, 3) AS month,\n       -- Named relative to today so the two recent years can be coloured.\n       y.year || CASE CAST(strftime('%Y', 'now', 'localtime') AS INTEGER) - CAST(y.year AS INTEGER)\n                   WHEN 0 THEN ' (this year)' WHEN 1 THEN ' (last year)' ELSE '' END AS year,\n       agg.therms AS therms\nFROM months\nCROSS JOIN (SELECT DISTINCT year FROM agg) y\nLEFT JOIN agg ON agg.m = months.m AND agg.year = y.year\nORDER BY months.m, y.year",
+          "queryText": "WITH agg AS (\n  SELECT CAST(strftime('%m', s.ts, 'localtime') AS INTEGER) AS m,\n         strftime('%Y', s.ts, 'localtime') AS year,\n         SUM(s.value) / 29307.1 AS therms\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE so.slug = 'pge_gas' AND se.metric = 'gas_wh'\n  GROUP BY 1, 2\n), months(m) AS (\n  SELECT 1 UNION ALL SELECT m + 1 FROM months WHERE m < 12\n)\nSELECT substr('JanFebMarAprMayJunJulAugSepOctNovDec', (months.m - 1) * 3 + 1, 3) AS month,\n       -- Named relative to today so the two recent years can be coloured.\n       y.year || CASE CAST(strftime('%Y', 'now', 'localtime') AS INTEGER) - CAST(y.year AS INTEGER)\n                   WHEN 0 THEN ' (this year)' WHEN 1 THEN ' (last year)' ELSE '' END AS year,\n       agg.therms AS therms\nFROM months\nCROSS JOIN (SELECT DISTINCT year FROM agg) y\nLEFT JOIN agg ON agg.m = months.m AND agg.year = y.year\nORDER BY months.m, y.year"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "groupingToMatrix",
+          "options": {
+            "columnField": "year",
+            "rowField": "month",
+            "valueField": "therms",
+            "emptyValue": "null"
+          }
+        }
+      ],
+      "options": {
+        "orientation": "vertical",
+        "showValue": "never",
+        "stacking": "none",
+        "groupWidth": 0.8,
+        "barWidth": 0.9,
+        "xTickLabelRotation": 0,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: therms",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#D5D9DF"
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 1
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*\\(this year\\)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#6C5BB5"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*\\(last year\\)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#B3A9DD"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -17,6 +17,12 @@ the gap to the next row.
 
 Rows land on the `eagle` Source as grid_import_wh / grid_export_wh Wh
 samples, alongside whatever the Eagle 3 itself has pushed live.
+
+The same download carries natural-gas files: daily rows with a
+"USAGE (therms)" column. Those go to their own `pge_gas` Source as
+gas_wh, converted to Wh so every energy series shares one unit (the
+dashboards turn it back into therms). Nothing else writes gas, so
+there is no collector behind that Source.
 update_or_create on (series, ts) makes re-import idempotent; coverage is
 recorded BACKFILLED per row, and core.coverage.record_coverage merges
 touching same-state spans into one, so a whole file becomes one span
@@ -34,7 +40,7 @@ from django.utils import timezone
 
 from collectors.eagle import ensure_source
 from core.coverage import clear_coverage, record_coverage
-from core.models import CoverageSpan, Sample, Series
+from core.models import CoverageSpan, Sample, Series, Source
 
 # PG&E's DATE + TIME columns, tried in order. Older exports write
 # 08/01/2025; current ones write 2025-08-01.
@@ -51,6 +57,9 @@ _INCLUSIVE_END_MINUTE_STEP = 15
 # No END TIME column and only one row in the file: nothing to infer
 # spacing from. Picked as a plausible hourly default rather than left 0.
 _FALLBACK_DURATION_S = 3600
+# PG&E bills the US therm: 100,000 BTU.
+WH_PER_THERM = 29_307.1
+GAS_SOURCE_SLUG = "pge_gas"
 
 
 @dataclass
@@ -84,6 +93,25 @@ def _find_header(rows: list[list[str]]) -> tuple[int, list[str]] | None:
     return None
 
 
+def _is_gas(fields: list[str]) -> bool:
+    """Gas exports name their unit in the USAGE header: "USAGE (THERMS)"."""
+    return any(f.startswith("USAGE") and "THERM" in f for f in fields)
+
+
+def ensure_gas_source() -> Source:
+    source, _ = Source.objects.get_or_create(
+        slug=GAS_SOURCE_SLUG,
+        defaults={
+            "name": "PG&E Gas",
+            "kind": Source.Kind.GAS,
+            # Only ever imported by hand, a day at a time.
+            "poll_interval_s": 86400,
+            "native_resolution_s": 86400,
+        },
+    )
+    return source
+
+
 def _col(fields: list[str], name: str) -> int | None:
     return fields.index(name) if name in fields else None
 
@@ -96,7 +124,7 @@ def _col_prefix(fields: list[str], prefix: str) -> int | None:
 
 
 class Command(BaseCommand):
-    help = "Import a PG&E Green Button usage-export CSV into grid_import_wh/grid_export_wh"
+    help = "Import PG&E Green Button usage-export CSVs: electric into grid_import_wh/grid_export_wh, gas into gas_wh"
 
     def add_arguments(self, parser):
         parser.add_argument("files", nargs="+", help="Green Button CSV export path(s)")
@@ -115,7 +143,7 @@ class Command(BaseCommand):
         }
 
         grand_created = grand_updated = grand_unparseable = 0
-        grand_totals = {"grid_import_wh": 0.0, "grid_export_wh": 0.0}
+        grand_totals: dict[str, float] = {}
         grand_min = grand_max = None
 
         for path in options["files"]:
@@ -132,7 +160,7 @@ class Command(BaseCommand):
             grand_updated += updated
             grand_unparseable += unparseable
             for metric, wh in totals.items():
-                grand_totals[metric] += wh
+                grand_totals[metric] = grand_totals.get(metric, 0.0) + wh
             if ts_min is not None:
                 grand_min = ts_min if grand_min is None else min(grand_min, ts_min)
                 grand_max = ts_max if grand_max is None else max(grand_max, ts_max)
@@ -150,11 +178,16 @@ class Command(BaseCommand):
         with open(path, newline="", encoding="utf-8-sig") as fh:
             raw_rows = list(csv.reader(fh))
 
-        totals = {"grid_import_wh": 0.0, "grid_export_wh": 0.0}
+        totals: dict[str, float] = {}
         header = _find_header(raw_rows)
         if header is None:
             return 0, 0, len(raw_rows), totals, None, None
         header_i, fields = header
+        gas = _is_gas(fields)
+        if gas and "gas_wh" not in series_by_metric:
+            series_by_metric["gas_wh"], _ = Series.objects.get_or_create(
+                source=ensure_gas_source(), metric="gas_wh", defaults={"unit": "Wh"}
+            )
 
         date_idx = _col(fields, "DATE")
         start_idx = _col(fields, "START TIME")
@@ -225,7 +258,12 @@ class Command(BaseCommand):
 
             try:
                 values: list[tuple[str, float]] = []
-                if usage_idx is not None:
+                if gas:
+                    therms = float(raw[usage_idx])
+                    if therms < 0:
+                        raise ValueError("negative gas usage")
+                    values.append(("gas_wh", therms * WH_PER_THERM))
+                elif usage_idx is not None:
                     # Single-column USAGE only tells us one direction per
                     # row, but grid_hourly_wh takes the coverage of BOTH
                     # grid_import_wh and grid_export_wh for a window (it
@@ -352,9 +390,9 @@ class Command(BaseCommand):
                     # thing; the untouched hours must go back to unknown,
                     # not keep reading as known with nothing behind them.
                     #
-                    # Scoped to grid_import_wh/grid_export_wh only: this
-                    # importer is their exclusive writer (no collector
-                    # ever touches these two metrics), so nothing here
+                    # Scoped to grid_import_wh/grid_export_wh/gas_wh only:
+                    # this importer is their exclusive writer (no collector
+                    # ever touches these metrics), so nothing here
                     # risks a collector's own LIVE data. Lookback for
                     # candidates uses this series' own max sample
                     # duration, same reasoning as _clipped_energy_wh's
@@ -411,7 +449,7 @@ class Command(BaseCommand):
                     )
                     created += was_created
                     updated += not was_created
-                    totals[metric] += wh
+                    totals[metric] = totals.get(metric, 0.0) + wh
                     record_coverage(series, ts_utc, new_end, CoverageSpan.State.BACKFILLED)
                 ts_min = row.ts if ts_min is None else min(ts_min, row.ts)
                 ts_max = row.ts if ts_max is None else max(ts_max, row.ts)

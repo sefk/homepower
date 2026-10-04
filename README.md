@@ -69,13 +69,13 @@ listed with the question it answers. Highlights:
 
 A Grafana instance on **http://localhost:3425/** serves live dashboards off
 the same SQLite database, read-only — Sources, Sinks, Sources and Sinks,
-Live Power (10s refresh), Energy, and Data Health. It's config-as-code in `ops/grafana/`; install and operation are
+Live Power (10s refresh), Energy, Gas, and Data Health. It's config-as-code in `ops/grafana/`; install and operation are
 in [ops/README.md][ops].
 
 The Eagle 3 pushes to `POST /ingest/eagle/`; see [ops/README.md][ops]
-for configuring its uploader. Historical grid data imports from PG&E
-Green Button CSVs via `manage.py import_greenbutton` (backfilled
-coverage; see ops/README.md).
+for configuring its uploader. Historical grid data and daily gas use
+import from PG&E Green Button CSVs via `manage.py import_greenbutton`
+(backfilled coverage; see ops/README.md).
 
 Solar history comes from the vendor clouds: `manage.py backfill` walks
 SolarEdge (15-min, back to the 2015 install) and Enphase Enlighten

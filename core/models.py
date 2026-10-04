@@ -15,6 +15,7 @@ class Source(models.Model):
         SOLAR = "solar"
         GRID = "grid"
         EV = "ev"
+        GAS = "gas"
 
     slug = models.SlugField(unique=True)
     name = models.CharField(max_length=100)
