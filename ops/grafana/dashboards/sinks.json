@@ -781,7 +781,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "Everything inside **House** is one number today. These get their own slices as collectors are added:\n\n- Tesla (collector exists, needs credentials)\n- LG dryer\n- Bosch dishwashers (2)\n- Navien heat pump water heater\n\nUntil then, the histogram and the typical-day chart are the best view of what the big loads are doing."
+        "content": "Everything inside **House** is one number today. The Tesla is now metered — its charging shows on the homepower site's **EV** page and as `tesla/ev_charge_power_w` on Live Power and Energy — but isn't split out of House here yet. These get their own slices as collectors are added:\n\n- LG dryer\n- Bosch dishwashers (2)\n- Navien heat pump water heater\n\nUntil then, the histogram and the typical-day chart are the best view of what the big loads are doing."
       }
     },
     {

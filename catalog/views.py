@@ -864,7 +864,7 @@ def ev(request):
         request,
         "catalog/ev.html",
         {
-            "section": "catalog",
+            "section": "ev",
             "has_source": series is not None,
             "sessions": rows,
             "total_savings": sum(r["saved"] for r in rows),
