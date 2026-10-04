@@ -700,7 +700,7 @@
       "description": "Average house load in each local hour. Always the last 30 days, whatever the dashboard range. 16:00–20:00 are the peak-price hours.",
       "gridPos": {
         "h": 8,
-        "w": 14,
+        "w": 24,
         "x": 0,
         "y": 41
       },
@@ -768,21 +768,6 @@
         ]
       },
       "timeFrom": "30d"
-    },
-    {
-      "type": "text",
-      "id": 11,
-      "title": "Not yet metered",
-      "gridPos": {
-        "h": 8,
-        "w": 10,
-        "x": 14,
-        "y": 41
-      },
-      "options": {
-        "mode": "markdown",
-        "content": "Everything inside **House** is one number today. The Tesla is now metered — its charging shows on the homepower site's **EV** page and as `tesla/ev_charge_power_w` on Live Power and Energy — but isn't split out of House here yet. These get their own slices as collectors are added:\n\n- LG dryer\n- Bosch dishwashers (2)\n- Navien heat pump water heater\n\nUntil then, the histogram and the typical-day chart are the best view of what the big loads are doing."
-      }
     },
     {
       "type": "row",

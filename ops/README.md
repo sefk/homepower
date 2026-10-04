@@ -94,8 +94,7 @@ state Grafana owns and git doesn't.
   typical-day profile and an hour-by-day heatmap of house load; then the
   current through the 200 A service (watts over a nominal 240 V, peak per
   point) against the main and its 160 A continuous rating, exports dipping
-  below zero. Appliances and the car get slices here as their collectors
-  arrive
+  below zero
 - **Sources and Sinks** — the two together: solar→house, solar→grid and
   grid→house energy, self-sufficiency and self-use, an energy-flow Sankey
   (kWh from each array and the grid to the house and back out), a mirrored balance
