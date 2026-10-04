@@ -78,6 +78,11 @@ class Collector(ABC):
         """Ensure the Source row exists; subclasses add vendor auth."""
         self._source = await sync_to_async(self._ensure_source)()
 
+    def next_interval_s(self) -> int:
+        """Seconds until the next poll. Vendors that pay per request
+        (Tesla) vary this with what the last poll saw."""
+        return self.poll_interval_s
+
     @abstractmethod
     async def poll(self) -> list[Reading]:
         """Fetch current readings from the vendor. Raise on failure."""

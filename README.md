@@ -10,8 +10,10 @@ permanent).
 Status: **Milestone 1** (foundation + Envoy ADU solar) plus the
 **Eagle 3 grid source** — whole-home import/export pushed by the meter
 every ~8s. The **SolarEdge cloud collector** (main array, 15-min) and
-the **Tesla Fleet API collector** (EV charging) ship fixture-tested but
-key-gated — each stays disabled until its `.env` credentials are set.
+the **Tesla Fleet API collector** (EV charging; polls slowly while
+idle and caps its monthly requests to stay inside Tesla's $10 API
+credit) ship key-gated — each stays disabled until its `.env`
+credentials are set.
 Coming per the [build order][prd]: peak decomposition.
 
 ## Setup
@@ -33,7 +35,7 @@ SOLAREDGE_PASSWORD=...
 SOLAREDGE_SITE_ID=...              # number in the portal URL after signing in
 TESLA_CLIENT_ID=...                # see ops/tesla-setup.md
 TESLA_CLIENT_SECRET=...
-TESLA_REFRESH_TOKEN=...            # from `manage.py tesla_auth`
+TESLA_REFRESH_TOKEN=...            # from `manage.py tesla_auth` (after `tesla_register`)
 # optional overrides:
 # ENVOY_HOST=10.10.0.222
 # HOMEPOWER_PORT=8425

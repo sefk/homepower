@@ -114,14 +114,20 @@ SOLAREDGE_TOKEN_FILE = VAR_DIR / "solaredge_token.json"
 # tesla_auth`; see ops/tesla-setup.md for the developer-app registration
 # and public-key hosting steps. Leave TESLA_CLIENT_ID/TESLA_REFRESH_TOKEN
 # blank to disable the collector. TESLA_VIN is optional -- when blank the
-# collector reads the account's first vehicle (PRD assumption: the free
-# tier covers one car).
+# collector reads the account's first vehicle.
 TESLA_CLIENT_ID = os.environ.get("TESLA_CLIENT_ID", "")
 TESLA_CLIENT_SECRET = os.environ.get("TESLA_CLIENT_SECRET", "")
 TESLA_REFRESH_TOKEN = os.environ.get("TESLA_REFRESH_TOKEN", "")
 TESLA_VIN = os.environ.get("TESLA_VIN", "")
 TESLA_REGION = os.environ.get("TESLA_REGION", "na")
 TESLA_TOKEN_FILE = VAR_DIR / "tesla_token.json"
+# The Fleet API bills per request ($10/month credit). The collector stops
+# calling it for the rest of the month once this many requests are spent.
+TESLA_MONTHLY_REQUEST_BUDGET = int(os.environ.get("TESLA_MONTHLY_REQUEST_BUDGET", "4000"))
+TESLA_USAGE_FILE = VAR_DIR / "tesla_usage.json"
+# Key pair whose public half is hosted on the app's domain; see
+# `manage.py tesla_register`.
+TESLA_PUBLIC_KEY_FILE = VAR_DIR / "tesla" / "com.tesla.3p.public-key.pem"
 
 # Home coordinates, for the Tesla collector's best-effort home-charging
 # geofence (PRD wants home charging cost, not Supercharger stops).

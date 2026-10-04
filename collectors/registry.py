@@ -53,6 +53,8 @@ def enabled_collectors() -> list[Collector]:
                 client_secret=settings.TESLA_CLIENT_SECRET,
                 refresh_token=settings.TESLA_REFRESH_TOKEN,
                 token_file=settings.TESLA_TOKEN_FILE,
+                usage_file=settings.TESLA_USAGE_FILE,
+                monthly_budget=settings.TESLA_MONTHLY_REQUEST_BUDGET,
                 vin=settings.TESLA_VIN or None,
                 region=settings.TESLA_REGION,
                 home_lat=settings.HOME_LAT,

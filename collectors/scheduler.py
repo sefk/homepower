@@ -1,10 +1,11 @@
 """Per-source asyncio loops. One failing source never stalls another.
 
-Each collector runs on its own fixed cadence measured poll-start to
-poll-start, so a slow vendor response doesn't drift the schedule. Setup
-failures (bad credentials, vendor down) retry with backoff instead of
-killing the loop — the source just stays absent, which the coverage
-model already treats honestly as unknown.
+Each collector runs on its own cadence (fixed, unless the collector
+varies next_interval_s()) measured poll-start to poll-start, so a slow
+vendor response doesn't drift the schedule. Setup failures (bad
+credentials, vendor down) retry with backoff instead of killing the
+loop — the source just stays absent, which the coverage model already
+treats honestly as unknown.
 """
 
 import asyncio
@@ -43,7 +44,7 @@ async def run_collector(collector: Collector) -> None:
         started = loop.time()
         await collector.run_once()
         elapsed = loop.time() - started
-        await asyncio.sleep(max(0.0, collector.poll_interval_s - elapsed))
+        await asyncio.sleep(max(0.0, collector.next_interval_s() - elapsed))
 
 
 async def prune_runs() -> None:
