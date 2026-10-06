@@ -17,6 +17,7 @@
 details { margin-top: 0.5rem; }
 summary { cursor: pointer; color: var(--ink-2); font-size: 0.9rem; }
 #tariff table.data .text { text-align: left; }
+.rate-warning { margin: 0 0 0.5rem; font-size: 0.85rem; font-weight: 600; color: var(--status-critical); }
 </style>
 {% endblock %}
 
@@ -116,22 +117,37 @@ summary { cursor: pointer; color: var(--ink-2); font-size: 0.9rem; }
   </p>
 
   <h2 style="margin: 1rem 0 0.5rem">Rates this app uses</h2>
+  {% if missing_adjustments %}
+  <p class="rate-warning">
+    Adjustment not entered for {{ missing_adjustments|join:", " }}.
+    Costs in those windows use PG&amp;E's side only, without WestLight generation, the PG&amp;E
+    generation credit or PCIA. Add it from a bill: <code>manage.py set_cca_adjustment</code>.
+  </p>
+  {% endif %}
   <table class="data">
-    <tr><th>From</th><th>Summer peak</th><th>Summer off-peak</th><th>Winter peak</th><th>Winter off-peak</th><th class="text">Source</th></tr>
-    {% for t in rate_tables %}
-    <tr{% if t == current_rates %} style="font-weight: 600"{% endif %}>
-      <td>{% if forloop.first %}—{% else %}{{ t.effective|date:"M j, Y" }}{% endif %}</td>
-      <td>${{ t.summer_peak|floatformat:3 }}</td>
-      <td>${{ t.summer_offpeak|floatformat:3 }}</td>
-      <td>${{ t.winter_peak|floatformat:3 }}</td>
-      <td>${{ t.winter_offpeak|floatformat:3 }}</td>
-      <td class="text">{{ t.source }}</td>
+    <tr>
+      <th>From</th>
+      <th>Summer peak</th><th>Summer off-peak</th><th>Winter peak</th><th>Winter off-peak</th>
+      <th class="text">PG&amp;E source</th>
+    </tr>
+    {% for e in rate_eras %}
+    <tr{% if e.current %} style="font-weight: 600"{% endif %}>
+      <td>{% if e.effective.year < 2001 %}—{% else %}{{ e.effective|date:"M j, Y" }}{% endif %}</td>
+      {% for c in e.cells %}
+      <td>{% if c %}${{ c.all_in|floatformat:3 }}
+        <div class="small muted" style="font-weight: 400">{{ c.pge|floatformat:3 }} {{ c.adjustment_label }}{% if c.tier == 2 %} · tier 2{% endif %}</div>
+        {% else %}—{% endif %}</td>
+      {% endfor %}
+      <td class="text">{{ e.sources|join:", " }}</td>
     </tr>
     {% endfor %}
   </table>
   <p class="small muted" style="margin-bottom:0">
     All-in $/kWh (PG&amp;E delivery + WestLight generation), one rate per season and period for both
-    imports and exports, per NEM. Bold row is in effect today. Defined in billing/rates.py.
+    imports and exports, per NEM. Under each: PG&amp;E rate (read daily from PG&amp;E by the
+    <code>pge_rates</code> collector) then the CCA adjustment (hand-entered from bills; signed).
+    "seed" rows are all-in values back-derived from bills, with a zero adjustment. Winter uses the
+    tier 2 rate when PG&amp;E reports one. Bold row is in effect today. Tables: billing/models.py.
   </p>
 </div>
 

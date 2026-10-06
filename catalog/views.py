@@ -16,7 +16,7 @@ from django.utils import timezone
 
 from billing import rates
 from billing.cycles import cycle_label, true_up_cycles
-from billing.models import BillPeriod, GasBillPeriod
+from billing.models import BillPeriod, GasBillPeriod, UtilityRate
 from billing.rates import PEAK_END_HOUR, PEAK_START_HOUR, rate_for, rates_for
 from catalog.ev import sessions as ev_sessions
 from core import coverage
@@ -236,7 +236,14 @@ def health(request):
                 "push": source.slug == "eagle",  # push sources have no poll loop
                 "series_rows": series_rows,
                 "last_sample": last_sample,
-                "stale": last_sample is None or now - last_sample.ts > stale_after,
+                "last_run": source.runs.order_by("-started").first() if not series_rows else None,
+                "stale": (
+                    # A source that writes no samples (pge_rates writes rate
+                    # rows) is only as fresh as its last good run.
+                    (last_ok is None or now - last_ok.started > stale_after)
+                    if not series_rows
+                    else last_sample is None or now - last_sample.ts > stale_after
+                ),
                 "failures": list(failures.order_by("-started")[:5]),
                 "recovered_count": resolved.count(),
                 "recovered_last": resolved_last,
@@ -250,6 +257,14 @@ def health(request):
         {
             "section": "health",
             "sources": sources,
+            "missing_adjustments": [
+                f"{season} {period.replace('offpeak', 'off-peak')}"
+                for season, period in rates.missing_adjustments()
+            ],
+            "last_rate_change": UtilityRate.objects.exclude(source="seed")
+            .filter(effective_from__gt=rates.OPOWER_BASIS_START)
+            .order_by("-effective_from")
+            .first(),
             "window_start": window_start,
             "window_days": HEALTH_WINDOW_DAYS,
             "now": now,
@@ -417,8 +432,11 @@ def grid(request):
             "next_day": day + timedelta(days=days),
             "today": timezone.localdate(),
             "hours": hours,
-            "rate_tables": rates.RATE_TABLES,
-            "current_rates": rates.table_for(timezone.localdate()),
+            "rate_eras": rates.era_table(),
+            "missing_adjustments": [
+                f"{season} {period.replace('offpeak', 'off-peak')}"
+                for season, period in rates.missing_adjustments()
+            ],
             "bill_2026_07": {
                 "pge_peak": rates.PGE_SUMMER_PEAK_2026,
                 "pge_offpeak": rates.PGE_SUMMER_OFFPEAK_2026,

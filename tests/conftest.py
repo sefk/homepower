@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from billing import rates
 from core.models import Series, Source
 
 
@@ -19,3 +20,12 @@ def series(db) -> Series:
         native_resolution_s=60,
     )
     return Series.objects.create(source=source, metric="production_w", unit="W")
+
+
+@pytest.fixture(autouse=True)
+def fresh_rate_cache():
+    """billing.rates caches rows in-process; test transactions roll back
+    without telling it, so start and end every test with it empty."""
+    rates.clear_cache()
+    yield
+    rates.clear_cache()

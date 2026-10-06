@@ -19,7 +19,10 @@ every minute, and stays disabled if macmon isn't installed. The **Navien
 collector** reads the heat pump water heater's draw (compressor and
 elements) each minute over the NaviLink app's MQTT channel, through the
 unofficial [nwp500-python][nwp500]; it stays disabled until its login is
-set.
+set. The **PG&E rates collector** (`pge_rates`, daily, same `PGE_USERNAME`
+login as gas) reads PG&E's TOU rates back out of its cost data and
+records each rate change with its effective date, so cost views price
+every hour at the rate in force then.
 Coming per the [build order][prd]: peak decomposition.
 
 ## Setup

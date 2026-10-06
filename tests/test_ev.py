@@ -6,12 +6,12 @@ INSIGHTS.md) -- and gaps come only from core.coverage, never from
 timestamp arithmetic of this test's own.
 """
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
 
-from billing.rates import SUMMER_OFFPEAK, SUMMER_PEAK
+from billing.rates import rates_for
 from catalog.ev import sessions
 from core.coverage import record_coverage
 from core.models import CoverageSpan, Sample, Series, Source
@@ -116,8 +116,9 @@ class TestSessionCostAcrossPeakBoundary:
         [session] = sessions(tesla_series, start - timedelta(hours=1), start + timedelta(hours=2))
 
         assert session.kwh == pytest.approx(4.0)
-        expected_actual = 3 * SUMMER_PEAK + 1 * SUMMER_OFFPEAK
-        expected_counterfactual = 4 * SUMMER_OFFPEAK
+        summer_peak, summer_offpeak = rates_for(date(2026, 8, 4))
+        expected_actual = 3 * summer_peak + 1 * summer_offpeak
+        expected_counterfactual = 4 * summer_offpeak
         assert session.actual_cost == pytest.approx(expected_actual)
         assert session.counterfactual_cost == pytest.approx(expected_counterfactual)
         assert session.savings == pytest.approx(expected_actual - expected_counterfactual)

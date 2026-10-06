@@ -13,7 +13,7 @@ from django.utils import timezone
 
 from billing.cycles import cycle_label, true_up_cycles
 from billing.models import BillPeriod
-from billing.rates import SUMMER_OFFPEAK, SUMMER_PEAK, WINTER_OFFPEAK, WINTER_PEAK
+from billing.rates import rates_for
 from core.coverage import record_coverage
 from core.models import CoverageSpan, Sample, Series, Source
 
@@ -191,8 +191,8 @@ class TestPeakData:
         i = data["labels"].index("2025-12-15")
         assert data["peak_kwh"][i] == pytest.approx(474)
         assert data["offpeak_kwh"][i] == pytest.approx(563)
-        assert data["peak_dollars"][i] == pytest.approx(474 * WINTER_PEAK)
-        assert data["offpeak_dollars"][i] == pytest.approx(563 * WINTER_OFFPEAK)
+        assert data["peak_dollars"][i] == pytest.approx(474 * rates_for(date(2025, 12, 15))[0])
+        assert data["offpeak_dollars"][i] == pytest.approx(563 * rates_for(date(2025, 12, 15))[1])
 
 
 class TestPeakSplitMath:
@@ -265,8 +265,8 @@ class TestPeakPage:
         content = resp.content.decode()
         assert "Sat Aug 1" in content
         # 1kWh at August 2026 (summer) rates
-        assert f"${SUMMER_PEAK:.2f}" in content
-        assert f"${SUMMER_OFFPEAK:.2f}" in content
+        assert f"${rates_for(date(2026, 8, 1))[0]:.2f}" in content
+        assert f"${rates_for(date(2026, 8, 1))[1]:.2f}" in content
         assert "unknown" in content  # the other 6 days have no coverage at all
 
 
@@ -312,8 +312,8 @@ class TestCostmapData:
 
         data = client.get("/costmap/data.json").json()
         di = data["days"].index("2026-07-15")
-        assert data["z"][17][di] == pytest.approx(2.0 * SUMMER_PEAK)
-        assert data["z"][10][di] == pytest.approx(1.0 * SUMMER_OFFPEAK)
+        assert data["z"][17][di] == pytest.approx(2.0 * rates_for(date(2026, 7, 15))[0])
+        assert data["z"][10][di] == pytest.approx(1.0 * rates_for(date(2026, 7, 15))[1])
         # every other hour that day is still uncovered -> null, not zero
         assert data["z"][0][di] is None
 
@@ -334,8 +334,8 @@ class TestCostmapData:
 
         data = client.get("/costmap/data.json").json()
         di = data["days"].index("2026-01-15")
-        assert data["z"][18][di] == pytest.approx(3.0 * WINTER_PEAK)
-        assert data["z"][6][di] == pytest.approx(0.5 * WINTER_OFFPEAK)
+        assert data["z"][18][di] == pytest.approx(3.0 * rates_for(date(2026, 1, 15))[0])
+        assert data["z"][6][di] == pytest.approx(0.5 * rates_for(date(2026, 1, 15))[1])
 
 
 class TestCostmapDst:
@@ -378,7 +378,7 @@ class TestCostmapDst:
         data = client.get("/costmap/data.json").json()
         di = data["days"].index("2026-11-01")
         # 2 kWh total across the repeated hour at the winter off-peak rate
-        assert data["z"][1][di] == pytest.approx(2.0 * WINTER_OFFPEAK)
+        assert data["z"][1][di] == pytest.approx(2.0 * rates_for(date(2026, 11, 1))[1])
 
 
 class TestCostmapPage:

@@ -357,7 +357,9 @@ class TestWiredIntoCostViews:
     def test_peak_table_shows_real_dollars_from_green_button_only_data(
         self, tmp_path, client, monkeypatch
     ):
-        from billing.rates import SUMMER_OFFPEAK, SUMMER_PEAK
+        from billing.rates import rates_for
+
+        summer_peak, summer_offpeak = rates_for(date(2026, 8, 10))
 
         frozen_today = date(2026, 8, 10)
         monkeypatch.setattr("catalog.views.timezone.localdate", lambda: frozen_today)
@@ -371,13 +373,15 @@ class TestWiredIntoCostViews:
         assert resp.status_code == 200
         content = resp.content.decode()
         # 4-9pm: 5h * 500Wh = 2.5 kWh; off-peak: 19h * 500Wh = 9.5 kWh
-        assert f"${2.5 * SUMMER_PEAK:.2f}" in content
-        assert f"${9.5 * SUMMER_OFFPEAK:.2f}" in content
+        assert f"${2.5 * summer_peak:.2f}" in content
+        assert f"${9.5 * summer_offpeak:.2f}" in content
 
     def test_costmap_cell_is_real_from_green_button_only_data(
         self, tmp_path, client, monkeypatch
     ):
-        from billing.rates import SUMMER_PEAK
+        from billing.rates import rates_for
+
+        summer_peak = rates_for(date(2026, 8, 10))[0]
 
         frozen_today = date(2026, 8, 10)
         monkeypatch.setattr("catalog.views.timezone.localdate", lambda: frozen_today)
@@ -389,7 +393,7 @@ class TestWiredIntoCostViews:
 
         data = client.get("/costmap/data.json").json()
         di = data["days"].index("2026-08-10")
-        assert data["z"][17][di] == pytest.approx(0.5 * SUMMER_PEAK)  # 5pm, inside 4-9pm
+        assert data["z"][17][di] == pytest.approx(0.5 * summer_peak)  # 5pm, inside 4-9pm
 
 
 @pytest.mark.django_db

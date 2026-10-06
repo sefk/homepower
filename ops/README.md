@@ -258,6 +258,38 @@ collector writes the same series the same way, so a hand import and a
 poll of the same day agree; imports are now only for history older than
 its 30-day window.
 
+## PG&E TOU rates (daily, automatic)
+
+Costs on Peak, Cost map, Grid and EV price each hour at an effective-dated
+all-in $/kWh from two tables (`billing.UtilityRate` + `billing.CcaAdjustment`,
+logic in `billing/rates.py`):
+
+- **UtilityRate**, PG&E's side: kept current by the `pge_rates` collector.
+  Once a day it signs in as `pge_gas` does (same `pge_auth` cookie), reads
+  30 days of hourly electric cost from Opower, derives cost / kWh per
+  season, peak/off-peak and tier, and inserts a row effective the first
+  day a rate moves by more than $0.0005. A change is logged at WARNING and
+  appears in the run message on `/health/` ("RATE CHANGE: ..."). To
+  recover older change dates: `manage.py pge_rates_backfill --days 400
+  --dry-run` (prints the rate eras and the rows it would write; drop
+  `--dry-run` to write). Days before 2026-03-01 are ignored: earlier
+  history is all-in values back-derived from bills.
+- **CcaAdjustment**: WestLight generation - PG&E generation credit + PCIA,
+  $/kWh. Opower can't see it, so enter it from a bill, effective on the
+  bill period's start date:
+
+  ```sh
+  uv run python manage.py set_cca_adjustment winter peak 2026-10-01 0.0816 --note "Nov 2026 bill"
+  ```
+
+  Until it exists, `/grid/` and `/health/` warn and winter is priced on
+  PG&E's side only. (Winter has no adjustment yet; summer has the July
+  2026 one.) The seeded 2026-03-01 winter rates are provisional until a
+  backfill dates them.
+
+Winter prices at tier 2 when PG&E reports a tier-2 rate for the date,
+otherwise tier 1; summer is always tier 1.
+
 ## Notes
 
 - `KeepAlive` restarts the process if either the web server or the

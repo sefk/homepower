@@ -140,7 +140,7 @@ The Eagle 3 hasn't arrived, so grid data — the highest-value source — is las
 | Tesla Fleet API free tier covers one car | Poll less often, or drop to charge-session polling only |
 | 1-minute resolution suffices for load signatures | Hot tub and dryer stay indistinguishable; decomposition needs sub-minute from the Eagle |
 | SQLite handles ~2.1M rows/yr with rollups | Postgres 17 is already running on this host |
-| All-in E-TOU-C rates built from the bills are close enough: pre-March-2026 ~$0.66/$0.45 summer, ~$0.625/$0.571 winter; from March 2026 (Base Services Charge) ~$0.52/$0.30 summer from the July 2026 bill, winter carried forward until a winter bill arrives | Cost analyses drift from the actual bill; refresh `billing/rates.py` from a newer bill |
+| All-in E-TOU-C rates = PG&E's rate (read daily from Opower, effective-dated) + a hand-entered CCA adjustment (WestLight generation - PG&E generation credit + PCIA) are close enough: pre-March-2026 all-in ~$0.66/$0.45 summer, ~$0.625/$0.571 winter; from March 2026 (Base Services Charge) summer from the July 2026 bill; winter is PG&E's side only until a winter bill supplies the adjustment | Cost analyses drift from the actual bill; enter the adjustment from a newer bill (`set_cca_adjustment`) |
 | ADU array is ~1.75–2 kW (5 panels, IQ7+) | Per-kW normalization is off; read the real figure off the Envoy |
 
 ## Open questions

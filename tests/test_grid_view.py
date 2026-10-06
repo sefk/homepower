@@ -73,11 +73,37 @@ class TestGridPage:
 @pytest.mark.django_db
 class TestTariffCard:
     def test_explains_nem_and_lists_rates(self, client):
-        from billing.rates import SUMMER_OFFPEAK, SUMMER_PEAK
+        from datetime import date
 
+        from billing.rates import rates_for
+
+        peak, offpeak = rates_for(date(2026, 8, 1))
         content = client.get("/grid/").content.decode()
         assert 'id="tariff"' in content
         assert "E-TOU-C" in content
         assert "Net Energy Metering" in content
-        assert f"${SUMMER_PEAK:.3f}" in content
-        assert f"${SUMMER_OFFPEAK:.3f}" in content
+        assert f"${peak:.3f}" in content
+        assert f"${offpeak:.3f}" in content
+
+
+    def test_warns_that_the_winter_adjustment_is_missing(self, client):
+        content = client.get("/grid/").content.decode()
+        assert "Adjustment not entered for winter peak, winter off-peak" in content
+
+    def test_warning_clears_once_adjustments_are_entered(self, client):
+        from datetime import date
+
+        from billing.models import CcaAdjustment
+
+        for period in ("peak", "offpeak"):
+            CcaAdjustment.objects.create(
+                season="winter", period=period, effective_from=date(2026, 3, 1), amount=0.05
+            )
+        content = client.get("/grid/").content.decode()
+        assert "Adjustment not entered" not in content
+
+    def test_lists_each_rate_era_with_its_source(self, client):
+        content = client.get("/grid/").content.decode()
+        assert "Mar 1, 2026" in content
+        assert "seed" in content
+        assert "opower" in content

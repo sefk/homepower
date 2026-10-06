@@ -12,6 +12,7 @@ from .envoy import EnvoyCollector
 from .macmon import MacmonCollector
 from .navien import NavienCollector
 from .pge import PgeGasCollector
+from .pge_rates import PgeRatesCollector
 from .solaredge import SolarEdgeCollector
 from .solaredge_auth import SolarEdgeAuth
 from .tesla import TeslaCollector
@@ -69,6 +70,13 @@ def enabled_collectors() -> list[Collector]:
     if settings.PGE_USERNAME and settings.PGE_PASSWORD:
         collectors.append(
             PgeGasCollector(
+                username=settings.PGE_USERNAME,
+                password=settings.PGE_PASSWORD,
+                login_file=settings.PGE_LOGIN_FILE,
+            )
+        )
+        collectors.append(
+            PgeRatesCollector(
                 username=settings.PGE_USERNAME,
                 password=settings.PGE_PASSWORD,
                 login_file=settings.PGE_LOGIN_FILE,

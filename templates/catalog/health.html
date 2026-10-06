@@ -85,6 +85,24 @@
   <span><span class="chip unknown"></span>unknown</span>
 </div>
 
+<section class="card">
+  <h2>TOU rates</h2>
+  {% if missing_adjustments %}
+  <p class="failures-head" style="margin-top:0">
+    CCA adjustment not entered for {{ missing_adjustments|join:", " }} — costs there use PG&amp;E's side
+    only. Enter it from a bill with <code>manage.py set_cca_adjustment</code>.
+  </p>
+  {% else %}
+  <p class="small muted" style="margin:0">CCA adjustments are entered for every season and period.</p>
+  {% endif %}
+  <p class="small muted" style="margin-bottom:0">
+    {% if last_rate_change %}Last PG&amp;E rate change: {{ last_rate_change.season }}
+    {{ last_rate_change.period }} tier {{ last_rate_change.tier }} to
+    ${{ last_rate_change.rate|floatformat:4 }}, effective {{ last_rate_change.effective_from|date:"M j, Y" }}.
+    {% else %}No PG&amp;E rate change seen since March 2026.{% endif %}
+  </p>
+</section>
+
 {% for row in sources %}
 <section class="card">
   <div class="source-head">
@@ -124,6 +142,7 @@
     {% else %}
       No samples yet
     {% endif %}
+    {% if row.last_run %}Last run {{ row.last_run.started|timesince }} ago: {{ row.last_run.message|truncatechars:200 }}{% endif %}
     · {% if row.push %}pushes every ~{{ row.source.poll_interval_s }}s{% else %}polls every {{ row.source.poll_interval_s }}s{% endif %}
   </p>
 
