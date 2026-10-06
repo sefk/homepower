@@ -301,6 +301,21 @@ def solar(request):
                 )
             tables.append({"source": series.source, "hours": hours})
 
+    # An array with nothing in the window would otherwise just be a missing
+    # line. Say so, with its last reading -- SolarEdge's portal can lag the
+    # morning by an hour or more while Grafana's trailing 24h still shows
+    # yesterday.
+    silent = []
+    for series in (
+        Series.objects.filter(source__kind=Source.Kind.SOLAR, metric="production_w")
+        .select_related("source")
+        .order_by("source__slug")
+    ):
+        if Sample.objects.filter(series=series, ts__gte=start, ts__lt=end).exists():
+            continue
+        last = Sample.objects.filter(series=series, ts__lt=end).order_by("-ts").first()
+        silent.append({"source": series.source, "last_ts": last.ts if last else None})
+
     return render(
         request,
         "catalog/solar.html",
@@ -312,6 +327,7 @@ def solar(request):
             "next_day": day + timedelta(days=days),
             "today": timezone.localdate(),
             "tables": tables,
+            "silent": silent,
         },
     )
 

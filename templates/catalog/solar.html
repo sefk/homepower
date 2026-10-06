@@ -16,6 +16,7 @@
 #chart { width: 100%; height: 420px; }
 details { margin-top: 0.5rem; }
 summary { cursor: pointer; color: var(--ink-2); font-size: 0.9rem; }
+.no-data { color: var(--ink-2); margin: 0 0 0.5rem; }
 </style>
 {% endblock %}
 
@@ -36,6 +37,12 @@ summary { cursor: pointer; color: var(--ink-2); font-size: 0.9rem; }
 </div>
 
 <div class="card">
+  {% for row in silent %}
+  <p class="small no-data">
+    <strong>{{ row.source.name }}:</strong>
+    no data {% if day == today and range != 'week' %}yet today{% elif range == 'week' %}this week{% else %}this day{% endif %}{% if row.last_ts %} — last reading {{ row.last_ts|date:"D M j g:iA" }}{% else %} — no readings ever{% endif %}.
+  </p>
+  {% endfor %}
   <div id="chart"></div>
   <p class="small muted" style="margin-bottom:0">
     Breaks in the line are intervals with no data — unknown, not zero.

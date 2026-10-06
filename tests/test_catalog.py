@@ -160,3 +160,40 @@ class TestSolarPage:
         assert resp.content.count(b"Hourly energy \xe2\x80\x94") == 2
         assert b"Guest House Solar" in resp.content
         assert b"Main House Solar" in resp.content
+
+
+class TestSolarNoDataNote:
+    @pytest.fixture
+    def main_house(self, db):
+        from core.models import Series
+
+        main = Source.objects.create(
+            slug="solaredge", name="Main House Solar",
+            kind=Source.Kind.SOLAR, poll_interval_s=900, native_resolution_s=900,
+        )
+        return Series.objects.create(source=main, metric="production_w", unit="W")
+
+    def test_silent_array_today_names_its_last_reading(
+        self, solar_day, main_house, client, monkeypatch
+    ):
+        # Yesterday-evening reading only; Guest House has data today.
+        Sample.objects.create(
+            series=main_house, ts=utc(2026, 8, 1, 3, 45), duration_s=900, value=120.0
+        )
+        monkeypatch.setattr(
+            "catalog.views.timezone.localdate", lambda: timezone.datetime(2026, 8, 1).date()
+        )
+        content = client.get("/solar/?date=2026-08-01").content.decode()
+        assert "no data yet today" in content
+        assert "Main House Solar:" in content
+        assert "Fri Jul 31 8:45PM" in content  # 03:45 UTC, local
+        assert "Guest House Solar:" not in content  # it has data, no note
+
+    def test_past_day_says_this_day(self, solar_day, main_house, client):
+        content = client.get("/solar/?date=2026-08-01").content.decode()
+        assert "no data this day" in content
+        assert "no readings ever" in content
+
+    def test_no_note_when_every_array_has_data(self, solar_day, client):
+        content = client.get("/solar/?date=2026-08-01").content.decode()
+        assert 'class="small no-data"' not in content
