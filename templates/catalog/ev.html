@@ -14,7 +14,13 @@
 {% if sessions %}
 <p class="stat">
   Trailing {{ sessions|length }} session{{ sessions|pluralize }}: shifting every one of them past 9pm
-  would have saved <strong>${{ total_savings|floatformat:2 }}</strong> at bill-derived rates.
+  would have saved <strong>${{ total_savings|floatformat:2 }}</strong> at E-TOU-C rates.
+</p>
+<p class="small muted">
+  Under Net Energy Metering an exported kWh is credited what an imported one costs in the same
+  window, so charging midday on solar costs about the same as charging overnight: either way it's
+  an off-peak kWh. What matters is staying out of 4–9pm, which is what "Saved $" measures.
+  <a href="{% url 'catalog:grid' %}#tariff">Tariff details</a>.
 </p>
 
 <div class="card">
@@ -42,7 +48,9 @@
     A session is a contiguous run of charging power &gt; 0 (collectors/tesla.py); it breaks on an
     explicit "not charging" reading or a coverage gap, never on raw elapsed time. Actual $ prices
     each sample at the TOU rate in effect when it happened; shifted $ re-prices the same energy at
-    that date's off-peak rate — what charging entirely after 9pm would have cost.
+    that date's off-peak rate — what charging entirely outside 4–9pm would have cost. Solar-covered
+    charging is priced the same as grid charging: under NEM it's the export credit given up, which
+    equals the import rate.
   </p>
 </div>
 {% elif has_source %}

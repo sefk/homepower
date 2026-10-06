@@ -140,14 +140,14 @@ The Eagle 3 hasn't arrived, so grid data — the highest-value source — is las
 | Tesla Fleet API free tier covers one car | Poll less often, or drop to charge-session polling only |
 | 1-minute resolution suffices for load signatures | Hot tub and dryer stay indistinguishable; decomposition needs sub-minute from the Eagle |
 | SQLite handles ~2.1M rows/yr with rollups | Postgres 17 is already running on this host |
-| Bill-derived rates (~$0.66/$0.45 summer, ~$0.625/$0.571 winter) are close enough | Cost analyses drift from the actual bill; needs a real rate table with NEM credit rules |
+| All-in E-TOU-C rates built from the bills are close enough: pre-March-2026 ~$0.66/$0.45 summer, ~$0.625/$0.571 winter; from March 2026 (Base Services Charge) ~$0.52/$0.30 summer from the July 2026 bill, winter carried forward until a winter bill arrives | Cost analyses drift from the actual bill; refresh `billing/rates.py` from a newer bill |
 | ADU array is ~1.75–2 kW (5 panels, IQ7+) | Per-kW normalization is off; read the real figure off the Envoy |
 
 ## Open questions
 
 1. Does the Eagle 3, once installed, support local push without a Rainforest cloud account? — answerable only when the hardware arrives.
 2. Is the SolarEdge RS485 bus free, or is the bridge using it? — needs a look at the inverter's terminal block.
-3. Should NEM export credits be modeled at true retail rate, or does the PCE/WestLight generation split change the math? — worth one careful read of an actual bill before the cost analyses are trusted.
+3. ~~Should NEM export credits be modeled at true retail rate, or does the PCE/WestLight generation split change the math?~~ Answered from the July 2026 bill: the tariff is E-TOU-C under Net Energy Metering (not the Net Billing Tariff). Exports net against imports kWh-for-kWh within each TOU period at retail, on both the PG&E and WestLight sides, so one all-in rate per season and period prices both directions. The WestLight split changes the level of the rate, not the netting. Details are on the Grid page's tariff card.
 
 ## Success
 

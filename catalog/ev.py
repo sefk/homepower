@@ -17,6 +17,11 @@ Cost is integrated per-sample at the TOU rate actually in effect
 priced correctly on both sides. The counterfactual re-prices the same
 per-sample energy at that sample's date's off-peak rate -- what
 shifting the whole session past 9pm would have cost.
+
+Solar-covered charging needs no separate price: under NEM an exported
+kWh is credited at the import rate for its window (billing/rates.py),
+so a kWh the car takes from midday surplus costs the off-peak rate in
+forgone credit, same as an off-peak import.
 """
 
 from dataclasses import dataclass

@@ -16,6 +16,7 @@
 #chart { width: 100%; height: 420px; }
 details { margin-top: 0.5rem; }
 summary { cursor: pointer; color: var(--ink-2); font-size: 0.9rem; }
+#tariff table.data .text { text-align: left; }
 </style>
 {% endblock %}
 
@@ -59,6 +60,80 @@ summary { cursor: pointer; color: var(--ink-2); font-size: 0.9rem; }
   </table>
 </details>
 {% endif %}
+
+<div class="card" id="tariff">
+  <h2 style="margin-bottom: 0.5rem">Tariff: E-TOU-C under Net Energy Metering</h2>
+  <p>
+    PG&amp;E rate schedule <strong>E-TOU-C</strong>, "Time-of-Use (Peak Pricing 4 - 9 p.m. Every Day)".
+    Two periods only: <strong>peak 4–9pm every day</strong>, off-peak every other hour. Summer is
+    June–September, winter October–May. Generation comes from WestLight Energy (the community
+    choice provider, formerly PCE); PG&amp;E does delivery. True-up is in April.
+  </p>
+  <p>
+    Solar is on <strong>Net Energy Metering (NEM)</strong>, PG&amp;E's original net-metering program,
+    not the newer Net Billing Tariff ("NEM 3" / Solar Billing Plan). Under NEM, exports net against
+    imports kWh-for-kWh within each TOU period: an exported kWh is credited what an imported kWh
+    costs in the same window. Practical upshot:
+  </p>
+  <ul>
+    <li>Midday on solar and overnight off-peak cost about the same. A kWh the house or car uses at
+      noon is a kWh not exported at the off-peak credit; at 11pm it's imported at that same rate.</li>
+    <li>The lever is <strong>avoiding 4–9pm</strong>: using power then costs the peak rate, or forfeits
+      a peak-rate export credit.</li>
+    <li>Exception: if a true-up year ends net-exporting, the surplus is paid only a few cents per kWh,
+      so extra off-peak use then is nearly free.</li>
+  </ul>
+
+  <h2 style="margin: 1rem 0 0.5rem">Where it is on the bill (July 2026)</h2>
+  <table class="data">
+    <tr><th>Page</th><th class="text">Section</th><th class="text">What it shows</th></tr>
+    <tr><td>1</td><td class="text">Your Enrolled Programs</td><td class="text">Net Energy Metering (NEM)</td></tr>
+    <tr><td>5</td><td class="text">Details of PG&amp;E Electric Monthly Charges</td><td class="text">Rate Schedule: Time-of-Use (Peak Pricing 4 - 9 p.m. Every Day); Enrolled Programs: NEM; imports / exports / net kWh</td></tr>
+    <tr><td>6</td><td class="text">Details of NEM Charges</td><td class="text">The per-kWh rates, applied to <em>net</em> usage (imports minus exports)</td></tr>
+    <tr><td>7</td><td class="text">Details of WestLight Energy Electric Generation</td><td class="text">Rate Schedule: NEM E-TOU-C; generation rates</td></tr>
+  </table>
+  <p class="small muted">
+    On the Net Billing Tariff the bill would say "Net Billing Tariff" or "Solar Billing Plan" and
+    list hourly export credits in $/kWh.
+  </p>
+
+  <h2 style="margin: 1rem 0 0.5rem">Summer 2026 rates, built up from the bill</h2>
+  {% with b=bill_2026_07 %}
+  <table class="data">
+    <tr><th>Component ($/kWh)</th><th>Peak</th><th>Off-peak</th></tr>
+    <tr><td>PG&amp;E net usage (page 6)</td><td>{{ b.pge_peak|floatformat:4 }}</td><td>{{ b.pge_offpeak|floatformat:4 }}</td></tr>
+    <tr><td>Baseline credit, within 9.8 kWh/day (page 6)</td><td>−{{ b.baseline_credit|floatformat:4 }}</td><td>−{{ b.baseline_credit|floatformat:4 }}</td></tr>
+    <tr><td>PG&amp;E generation credit, spread per kWh (page 6)</td><td>−{{ b.generation_credit|floatformat:4 }}</td><td>−{{ b.generation_credit|floatformat:4 }}</td></tr>
+    <tr><td>Power Charge Indifference Adjustment, spread per kWh (page 6)</td><td>{{ b.pcia|floatformat:4 }}</td><td>{{ b.pcia|floatformat:4 }}</td></tr>
+    <tr><td>WestLight generation (page 7, two mid-cycle rates averaged)</td><td>{{ b.westlight_peak|floatformat:4 }}</td><td>{{ b.westlight_offpeak|floatformat:4 }}</td></tr>
+  </table>
+  {% endwith %}
+  <p class="small muted">
+    The bill gives the generation credit and PCIA only as dollar totals, so they're spread evenly over
+    the period's 171 net kWh. Summed, these reproduce the bill to within a few cents. The baseline
+    credit counts every summer kWh because summer months net-export, keeping net usage under the
+    allowance. The $24/month Base Services Charge (since March 2026) is fixed and not per kWh.
+  </p>
+
+  <h2 style="margin: 1rem 0 0.5rem">Rates this app uses</h2>
+  <table class="data">
+    <tr><th>From</th><th>Summer peak</th><th>Summer off-peak</th><th>Winter peak</th><th>Winter off-peak</th><th class="text">Source</th></tr>
+    {% for t in rate_tables %}
+    <tr{% if t == current_rates %} style="font-weight: 600"{% endif %}>
+      <td>{% if forloop.first %}—{% else %}{{ t.effective|date:"M j, Y" }}{% endif %}</td>
+      <td>${{ t.summer_peak|floatformat:3 }}</td>
+      <td>${{ t.summer_offpeak|floatformat:3 }}</td>
+      <td>${{ t.winter_peak|floatformat:3 }}</td>
+      <td>${{ t.winter_offpeak|floatformat:3 }}</td>
+      <td class="text">{{ t.source }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="small muted" style="margin-bottom:0">
+    All-in $/kWh (PG&amp;E delivery + WestLight generation), one rate per season and period for both
+    imports and exports, per NEM. Bold row is in effect today. Defined in billing/rates.py.
+  </p>
+</div>
 
 <script>
 const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;

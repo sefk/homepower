@@ -68,3 +68,16 @@ class TestGridPage:
         exp = energy_wh_split(grid_day, t0 + timedelta(hours=2), t0 + timedelta(hours=3))
         assert exp.exported_wh == pytest.approx(2000.0)
         assert exp.imported_wh == 0.0
+
+
+@pytest.mark.django_db
+class TestTariffCard:
+    def test_explains_nem_and_lists_rates(self, client):
+        from billing.rates import SUMMER_OFFPEAK, SUMMER_PEAK
+
+        content = client.get("/grid/").content.decode()
+        assert 'id="tariff"' in content
+        assert "E-TOU-C" in content
+        assert "Net Energy Metering" in content
+        assert f"${SUMMER_PEAK:.3f}" in content
+        assert f"${SUMMER_OFFPEAK:.3f}" in content

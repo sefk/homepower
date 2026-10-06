@@ -264,7 +264,7 @@ class TestPeakPage:
         assert resp.status_code == 200
         content = resp.content.decode()
         assert "Sat Aug 1" in content
-        # 1kWh at August (summer) rates: $0.66 peak, $0.45 off-peak
+        # 1kWh at August 2026 (summer) rates
         assert f"${SUMMER_PEAK:.2f}" in content
         assert f"${SUMMER_OFFPEAK:.2f}" in content
         assert "unknown" in content  # the other 6 days have no coverage at all
@@ -386,4 +386,4 @@ class TestCostmapPage:
         resp = client.get("/costmap/")
         assert resp.status_code == 200
         assert b"Cost heatmap" in resp.content
-        assert b"bill-derived approximations" in resp.content
+        assert b"E-TOU-C approximations" in resp.content

@@ -14,6 +14,7 @@ from django.http import Http404, JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
 
+from billing import rates
 from billing.cycles import cycle_label, true_up_cycles
 from billing.models import BillPeriod, GasBillPeriod
 from billing.rates import PEAK_END_HOUR, PEAK_START_HOUR, rate_for, rates_for
@@ -400,6 +401,17 @@ def grid(request):
             "next_day": day + timedelta(days=days),
             "today": timezone.localdate(),
             "hours": hours,
+            "rate_tables": rates.RATE_TABLES,
+            "current_rates": rates.table_for(timezone.localdate()),
+            "bill_2026_07": {
+                "pge_peak": rates.PGE_SUMMER_PEAK_2026,
+                "pge_offpeak": rates.PGE_SUMMER_OFFPEAK_2026,
+                "baseline_credit": rates.BASELINE_CREDIT_2026,
+                "generation_credit": rates.PGE_GENERATION_CREDIT_2026,
+                "pcia": rates.PCIA_2026,
+                "westlight_peak": rates.WESTLIGHT_SUMMER_PEAK_2026,
+                "westlight_offpeak": rates.WESTLIGHT_SUMMER_OFFPEAK_2026,
+            },
         },
     )
 
