@@ -29,6 +29,7 @@ VARS = {
     "$solar": "envoy/production_w",
     "$grid": "eagle/demand_w",
     "$series": "eagle/demand_w",
+    "${loads:sqlstring}": "'Tesla','Mac Studio'",
     "$__from": str(FROM_MS),
     "$__to": str(NOW_MS),
     "$__interval_ms": "900000",
@@ -98,7 +99,11 @@ def main():
                     target["queryType"],
                     target["timeColumns"],
                 )
-        for panel in dashboard["panels"]:
+        # A collapsed row keeps its panels inside it.
+        panels = [
+            p for top in dashboard["panels"] for p in [top, *top.get("panels", [])]
+        ]
+        for panel in panels:
             for target in panel.get("targets", []):
                 failures += not check(
                     f"[{panel['id']}] {panel['title']} ({target['refId']})",
