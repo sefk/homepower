@@ -111,6 +111,11 @@ SOLAREDGE_PASSWORD = os.environ.get("SOLAREDGE_PASSWORD", "")
 SOLAREDGE_SITE_ID = os.environ.get("SOLAREDGE_SITE_ID", "")
 SOLAREDGE_TOKEN_FILE = VAR_DIR / "solaredge_token.json"
 
+# Navien NWP500 heat pump water heater. The NaviLink app login, read
+# through the unofficial nwp500-python library; leave blank to disable.
+NAVIEN_USERNAME = os.environ.get("NAVIEN_USERNAME", "")
+NAVIEN_PASSWORD = os.environ.get("NAVIEN_PASSWORD", "")
+
 # Mac Studio (this host). macmon (`brew install macmon`) reads system
 # power without sudo; launchd's PATH lacks Homebrew, hence the fallback.
 # The collector is disabled when no macmon binary is found.

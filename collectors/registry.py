@@ -10,6 +10,7 @@ from django.conf import settings
 from .base import Collector
 from .envoy import EnvoyCollector
 from .macmon import MacmonCollector
+from .navien import NavienCollector
 from .pge import PgeGasCollector
 from .solaredge import SolarEdgeCollector
 from .solaredge_auth import SolarEdgeAuth
@@ -75,6 +76,14 @@ def enabled_collectors() -> list[Collector]:
         )
     else:
         logger.warning("pge_gas: no PG&E login in .env, collector disabled")
+    if settings.NAVIEN_USERNAME and settings.NAVIEN_PASSWORD:
+        collectors.append(
+            NavienCollector(
+                username=settings.NAVIEN_USERNAME, password=settings.NAVIEN_PASSWORD
+            )
+        )
+    else:
+        logger.warning("navien: no NaviLink login in .env, collector disabled")
     if settings.MACMON_PATH:
         collectors.append(MacmonCollector(macmon_path=settings.MACMON_PATH))
     else:

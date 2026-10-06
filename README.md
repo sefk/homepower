@@ -15,7 +15,11 @@ idle and caps its monthly requests to stay inside Tesla's $10 API
 credit) ship key-gated — each stays disabled until its `.env`
 credentials are set. The **Mac Studio collector** reads this host's own
 power draw through [macmon][macmon] (`brew install macmon`, no sudo)
-every minute, and stays disabled if macmon isn't installed.
+every minute, and stays disabled if macmon isn't installed. The **Navien
+collector** reads the heat pump water heater's draw (compressor and
+elements) each minute over the NaviLink app's MQTT channel, through the
+unofficial [nwp500-python][nwp500]; it stays disabled until its login is
+set.
 Coming per the [build order][prd]: peak decomposition.
 
 ## Setup
@@ -40,6 +44,8 @@ TESLA_CLIENT_SECRET=...
 TESLA_REFRESH_TOKEN=...            # from `manage.py tesla_auth` (after `tesla_register`)
 PGE_USERNAME=you@example.com       # pge.com login, for gas; then run `manage.py pge_auth` once
 PGE_PASSWORD=...
+NAVIEN_USERNAME=you@example.com    # NaviLink app login (water heater)
+NAVIEN_PASSWORD=...
 # optional overrides:
 # ENVOY_HOST=10.10.0.222
 # HOMEPOWER_PORT=8425
@@ -130,3 +136,4 @@ For boot-time operation under `launchd`, see [ops/README.md][ops].
 [ops]: ops/README.md
 [uv]: https://docs.astral.sh/uv/
 [macmon]: https://github.com/vladkens/macmon
+[nwp500]: https://github.com/eman/nwp500-python
