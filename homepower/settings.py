@@ -6,6 +6,7 @@ One process on studio, LAN-only, SQLite. Secrets come from `.env`
 """
 
 import os
+import shutil
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -109,6 +110,16 @@ SOLAREDGE_USERNAME = os.environ.get("SOLAREDGE_USERNAME", "")
 SOLAREDGE_PASSWORD = os.environ.get("SOLAREDGE_PASSWORD", "")
 SOLAREDGE_SITE_ID = os.environ.get("SOLAREDGE_SITE_ID", "")
 SOLAREDGE_TOKEN_FILE = VAR_DIR / "solaredge_token.json"
+
+# Mac Studio (this host). macmon (`brew install macmon`) reads system
+# power without sudo; launchd's PATH lacks Homebrew, hence the fallback.
+# The collector is disabled when no macmon binary is found.
+MACMON_PATH = (
+    os.environ.get("MACMON_PATH")
+    or shutil.which("macmon")
+    or shutil.which("macmon", path="/opt/homebrew/bin")
+    or ""
+)
 
 # PG&E (gas). pge.com login, read through the opower library. PG&E texts
 # or emails a code on first sign-in; `manage.py pge_auth` takes it once and

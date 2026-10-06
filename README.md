@@ -13,7 +13,9 @@ every ~8s. The **SolarEdge cloud collector** (main array, 15-min) and
 the **Tesla Fleet API collector** (EV charging; polls slowly while
 idle and caps its monthly requests to stay inside Tesla's $10 API
 credit) ship key-gated — each stays disabled until its `.env`
-credentials are set.
+credentials are set. The **Mac Studio collector** reads this host's own
+power draw through [macmon][macmon] (`brew install macmon`, no sudo)
+every minute, and stays disabled if macmon isn't installed.
 Coming per the [build order][prd]: peak decomposition.
 
 ## Setup
@@ -41,6 +43,7 @@ PGE_PASSWORD=...
 # optional overrides:
 # ENVOY_HOST=10.10.0.222
 # HOMEPOWER_PORT=8425
+# MACMON_PATH=/opt/homebrew/bin/macmon
 # DJANGO_DEBUG=true
 ```
 
@@ -126,3 +129,4 @@ For boot-time operation under `launchd`, see [ops/README.md][ops].
 [prd]: docs/prd/homepower/prd.md
 [ops]: ops/README.md
 [uv]: https://docs.astral.sh/uv/
+[macmon]: https://github.com/vladkens/macmon

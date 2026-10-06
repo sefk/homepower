@@ -9,6 +9,7 @@ from django.conf import settings
 
 from .base import Collector
 from .envoy import EnvoyCollector
+from .macmon import MacmonCollector
 from .pge import PgeGasCollector
 from .solaredge import SolarEdgeCollector
 from .solaredge_auth import SolarEdgeAuth
@@ -74,4 +75,8 @@ def enabled_collectors() -> list[Collector]:
         )
     else:
         logger.warning("pge_gas: no PG&E login in .env, collector disabled")
+    if settings.MACMON_PATH:
+        collectors.append(MacmonCollector(macmon_path=settings.MACMON_PATH))
+    else:
+        logger.warning("studio: macmon not installed, collector disabled")
     return collectors
