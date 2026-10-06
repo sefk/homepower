@@ -495,7 +495,7 @@
         "h": 11,
         "w": 24,
         "x": 0,
-        "y": 23
+        "y": 22
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -549,7 +549,7 @@
         "h": 8,
         "w": 14,
         "x": 0,
-        "y": 34
+        "y": 33
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -662,7 +662,7 @@
         "h": 8,
         "w": 10,
         "x": 14,
-        "y": 34
+        "y": 33
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -721,7 +721,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 42
+        "y": 41
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -798,7 +798,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 50
+        "y": 49
       }
     },
     {
@@ -810,7 +810,7 @@
         "h": 9,
         "w": 6,
         "x": 0,
-        "y": 51
+        "y": 50
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -880,7 +880,7 @@
         "h": 9,
         "w": 18,
         "x": 6,
-        "y": 51
+        "y": 50
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -986,11 +986,11 @@
     {
       "type": "timeseries",
       "id": 16,
-      "title": "Metered loads — each one on its own",
-      "description": "Power drawn by every load with its own meter, one line each. Pick which ones with Loads at the top. Today that's the Tesla's charging and the Mac Studio; appliances join as their collectors are added, with no dashboard edit. Each point is the average over its stretch of time; a gap means that load wasn't read, not that it was off.",
+      "title": "${loads}",
+      "description": "Power drawn by one load with its own meter. Each metered load gets its own chart, since a computer's watts and a car charger's kilowatts can't share an axis; pick which ones with Loads at the top. Appliances join as their collectors are added, with no dashboard edit. Each point is the average over its stretch of time; a gap means that load wasn't read, not that it was off.",
       "gridPos": {
         "h": 8,
-        "w": 24,
+        "w": 12,
         "x": 0,
         "y": 14
       },
@@ -1049,92 +1049,10 @@
           }
         },
         "overrides": []
-      }
-    },
-    {
-      "type": "row",
-      "id": 17,
-      "title": "Metered loads — log scale",
-      "collapsed": true,
-      "panels": [
-        {
-          "type": "timeseries",
-          "id": 18,
-          "title": "Metered loads — log scale",
-          "description": "The same loads on a log axis, so a 16 W computer and a 7 kW car charger both read. Zero can't sit on a log axis: a load drawing nothing shows as a gap here.",
-          "gridPos": {
-            "h": 10,
-            "w": 24,
-            "x": 0,
-            "y": 23
-          },
-          "datasource": {
-            "type": "frser-sqlite-datasource",
-            "uid": "homepower-sqlite"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "frser-sqlite-datasource",
-                "uid": "homepower-sqlite"
-              },
-              "queryType": "time series",
-              "timeColumns": [
-                "time"
-              ],
-              "rawQueryText": "WITH loads AS (\n  -- Every metered load: any power series that isn't a source of energy\n  -- or the grid meter. New appliance collectors appear here on their own.\n  SELECT se.id AS series_id, so.name AS name\n  FROM core_series se\n  JOIN core_source so ON so.id = se.source_id\n  WHERE so.kind NOT IN ('solar', 'grid', 'gas') AND se.unit = 'W'\n    AND so.name IN (${loads:sqlstring})\n), k AS (\n  SELECT MAX(300, $__interval_ms / 1000) AS step\n), ticks(t) AS (\n  SELECT ($__from / 1000 / (SELECT step FROM k)) * (SELECT step FROM k)\n  UNION ALL\n  SELECT t + (SELECT step FROM k) FROM ticks WHERE t + (SELECT step FROM k) < $__to / 1000\n), x AS (\n  SELECT s.series_id, CAST(strftime('%s', s.ts) AS INTEGER) AS st,\n         CAST(strftime('%s', s.ts) AS INTEGER) + s.duration_s AS en, s.value\n  FROM core_sample s\n  JOIN loads l ON l.series_id = s.series_id\n  WHERE s.ts >= datetime($__from / 1000 - 86400, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n)\n-- Each point is the mean over the part of its bucket the samples cover\n-- (a 30-minute reading spans several 5-minute buckets); no sample at all\n-- leaves a gap.\nSELECT ticks.t AS time, l.name AS load,\n       SUM(x.value * (MIN(x.en, ticks.t + k.step) - MAX(x.st, ticks.t)))\n         / SUM(MIN(x.en, ticks.t + k.step) - MAX(x.st, ticks.t)) AS value\nFROM ticks\nCROSS JOIN k\nCROSS JOIN loads l\nLEFT JOIN x ON x.series_id = l.series_id AND x.st < ticks.t + k.step AND x.en > ticks.t\nGROUP BY 1, 2\nORDER BY 1, 2",
-              "queryText": "WITH loads AS (\n  -- Every metered load: any power series that isn't a source of energy\n  -- or the grid meter. New appliance collectors appear here on their own.\n  SELECT se.id AS series_id, so.name AS name\n  FROM core_series se\n  JOIN core_source so ON so.id = se.source_id\n  WHERE so.kind NOT IN ('solar', 'grid', 'gas') AND se.unit = 'W'\n    AND so.name IN (${loads:sqlstring})\n), k AS (\n  SELECT MAX(300, $__interval_ms / 1000) AS step\n), ticks(t) AS (\n  SELECT ($__from / 1000 / (SELECT step FROM k)) * (SELECT step FROM k)\n  UNION ALL\n  SELECT t + (SELECT step FROM k) FROM ticks WHERE t + (SELECT step FROM k) < $__to / 1000\n), x AS (\n  SELECT s.series_id, CAST(strftime('%s', s.ts) AS INTEGER) AS st,\n         CAST(strftime('%s', s.ts) AS INTEGER) + s.duration_s AS en, s.value\n  FROM core_sample s\n  JOIN loads l ON l.series_id = s.series_id\n  WHERE s.ts >= datetime($__from / 1000 - 86400, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n)\n-- Each point is the mean over the part of its bucket the samples cover\n-- (a 30-minute reading spans several 5-minute buckets); no sample at all\n-- leaves a gap.\nSELECT ticks.t AS time, l.name AS load,\n       SUM(x.value * (MIN(x.en, ticks.t + k.step) - MAX(x.st, ticks.t)))\n         / SUM(MIN(x.en, ticks.t + k.step) - MAX(x.st, ticks.t)) AS value\nFROM ticks\nCROSS JOIN k\nCROSS JOIN loads l\nLEFT JOIN x ON x.series_id = l.series_id AND x.st < ticks.t + k.step AND x.en > ticks.t\nGROUP BY 1, 2\nORDER BY 1, 2"
-            }
-          ],
-          "options": {
-            "legend": {
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true,
-              "calcs": [
-                "max",
-                "mean"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "watt",
-              "decimals": 0,
-              "color": {
-                "mode": "palette-classic-by-name"
-              },
-              "displayName": "${__field.labels.load}",
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 2,
-                "fillOpacity": 10,
-                "showPoints": "never",
-                "spanNulls": false,
-                "gradientMode": "none",
-                "lineInterpolation": "stepAfter",
-                "axisCenteredZero": false,
-                "scaleDistribution": {
-                  "type": "log",
-                  "log": 10
-                }
-              }
-            },
-            "overrides": []
-          }
-        }
-      ],
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 22
-      }
+      },
+      "repeat": "loads",
+      "repeatDirection": "h",
+      "maxPerRow": 2
     }
   ]
 }

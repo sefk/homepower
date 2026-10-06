@@ -99,11 +99,7 @@ def main():
                     target["queryType"],
                     target["timeColumns"],
                 )
-        # A collapsed row keeps its panels inside it.
-        panels = [
-            p for top in dashboard["panels"] for p in [top, *top.get("panels", [])]
-        ]
-        for panel in panels:
+        for panel in dashboard["panels"]:
             for target in panel.get("targets", []):
                 failures += not check(
                     f"[{panel['id']}] {panel['title']} ({target['refId']})",

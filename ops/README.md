@@ -89,9 +89,9 @@ state Grafana owns and git doesn't.
   production over all backfilled history
 - **Sinks** — where it goes: house load (derived as solar + grid) and
   export, the always-on floor, the 4–9pm share, each separately metered
-  load on its own line (the Tesla, the Mac Studio and the water heater; any non-solar/grid/gas power
-  series joins automatically; the Loads picker at the top chooses which
-  to chart, and a collapsed row below holds the same chart on a log axis), a load histogram, a
+  load on its own chart (the Tesla, the Mac Studio and the water heater;
+  any non-solar/grid/gas power series joins automatically, and the Loads
+  picker at the top chooses which to show), a load histogram, a
   typical-day profile and an hour-by-day heatmap of house load; then the
   current through the 200 A service (watts over a nominal 240 V, peak per
   point) against the main and its 160 A continuous rating, exports dipping
