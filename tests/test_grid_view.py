@@ -86,11 +86,11 @@ class TestTariffCard:
         assert f"${offpeak:.3f}" in content
 
 
-    def test_warns_that_the_winter_adjustment_is_missing(self, client):
+    def test_warns_that_the_winter_adjustment_is_missing(self, client, no_winter_adjustment):
         content = client.get("/grid/").content.decode()
         assert "Adjustment not entered for winter peak, winter off-peak" in content
 
-    def test_warning_clears_once_adjustments_are_entered(self, client):
+    def test_warning_clears_once_adjustments_are_entered(self, client, no_winter_adjustment):
         from datetime import date
 
         from billing.models import CcaAdjustment

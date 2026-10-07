@@ -313,7 +313,7 @@ class TestBackfillCommand:
 
 
 class TestHealthPage:
-    def test_shows_missing_adjustment_and_last_rate_change(self, client, db):
+    def test_shows_missing_adjustment_and_last_rate_change(self, client, no_winter_adjustment):
         UtilityRate.objects.create(
             season="winter", period="peak", tier=1, effective_from=date(2026, 10, 4), rate=0.4, source="opower"
         )

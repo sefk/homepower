@@ -448,6 +448,15 @@ def grid(request):
                 "westlight_peak_jul": rates.WESTLIGHT_SUMMER_PEAK_2026_07,
                 "westlight_offpeak_jul": rates.WESTLIGHT_SUMMER_OFFPEAK_2026_07,
             },
+            "bill_2026_04": {
+                "pge_peak": rates.PGE_WINTER_PEAK_2026,
+                "pge_offpeak": rates.PGE_WINTER_OFFPEAK_2026,
+                "baseline_credit": rates.BASELINE_CREDIT_2026,
+                "generation_credit": rates.PGE_GENERATION_CREDIT_2026_04,
+                "pcia": rates.PCIA_2026_04,
+                "cca_peak": rates.WESTLIGHT_WINTER_PEAK_2026,
+                "cca_offpeak": rates.WESTLIGHT_WINTER_OFFPEAK_2026,
+            },
         },
     )
 

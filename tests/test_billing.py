@@ -162,20 +162,20 @@ class TestRatePlusAdjustment:
 
 @pytest.mark.django_db
 class TestMissingAdjustments:
-    def test_winter_flagged_on_seed_data(self):
+    def test_winter_flagged_without_its_adjustment(self, no_winter_adjustment):
         assert missing_adjustments(date(2026, 10, 6)) == [("winter", "peak"), ("winter", "offpeak")]
         assert missing_adjustments(date(2026, 7, 1)) == [("winter", "peak"), ("winter", "offpeak")]
 
     def test_before_the_new_era_nothing_is_missing(self):
         assert missing_adjustments(date(2026, 2, 1)) == []
 
-    def test_entering_an_adjustment_clears_that_period_only(self):
+    def test_entering_an_adjustment_clears_that_period_only(self, no_winter_adjustment):
         CcaAdjustment.objects.create(
             season="winter", period="peak", effective_from=date(2026, 3, 1), amount=0.07
         )
         assert missing_adjustments(date(2026, 10, 6)) == [("winter", "offpeak")]
 
-    def test_winter_without_adjustment_is_priced_on_pge_side_only(self):
+    def test_winter_without_adjustment_is_priced_on_pge_side_only(self, no_winter_adjustment):
         parts = parts_for(date(2026, 10, 6), "peak")
         assert parts.adjustment == 0.0
         assert parts.all_in == parts.pge
@@ -188,10 +188,24 @@ class TestSetCcaAdjustment:
         row = CcaAdjustment.objects.get(season="winter", period="peak", effective_from=date(2026, 10, 1))
         assert row.amount == 0.0816 and row.note == "Nov bill"
         call_command("set_cca_adjustment", "winter", "peak", "2026-10-01", "0.09")
-        assert CcaAdjustment.objects.filter(season="winter", period="peak").count() == 2  # seed + this
+        assert CcaAdjustment.objects.filter(season="winter", period="peak").count() == 3  # 2000 seed, April 2026 bill, this
         assert CcaAdjustment.objects.get(effective_from=date(2026, 10, 1), period="peak", season="winter").amount == 0.09
         assert rates_for(date(2026, 10, 6))[0] == pytest.approx(0.3162 + 0.09)
 
     def test_negative_amounts_are_allowed(self):
         call_command("set_cca_adjustment", "summer", "offpeak", "2026-10-01", "-0.0137")
         assert CcaAdjustment.objects.get(effective_from=date(2026, 10, 1)).amount == -0.0137
+
+
+@pytest.mark.django_db
+class TestWinter2026Adjustment:
+    def test_seeded_data_has_nothing_missing(self):
+        assert missing_adjustments(date(2026, 10, 6)) == []
+
+    def test_winter_2026_rates_reproduce_the_april_bill(self):
+        # 03/18-04/15/2026: net 113.5674 peak + 20.422 off-peak kWh imported.
+        # PG&E $30.30 less $0.08 franchise fee, plus $9.81 CCA generation.
+        peak, offpeak = rates_for(date(2026, 4, 1))
+        assert peak == pytest.approx(0.3069, abs=0.0001)
+        assert offpeak == pytest.approx(0.2529, abs=0.0001)
+        assert 113.5674 * peak + 20.422 * offpeak == pytest.approx(30.30 - 0.08 + 9.81, abs=0.05)

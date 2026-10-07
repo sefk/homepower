@@ -74,6 +74,17 @@ WESTLIGHT_SUMMER_OFFPEAK_2026 = 0.04778
 WESTLIGHT_SUMMER_PEAK_2026_07 = 0.15036  # from 7/1
 WESTLIGHT_SUMMER_OFFPEAK_2026_07 = 0.05251
 
+# April 2026 bill (03/18-04/15/2026, 133.9894 net kWh imported), winter.
+# Same build-up; billing/migrations/0004 carries it as literals. The CCA
+# was still billing as Peninsula Clean Energy then.
+BILL_2026_04_NET_KWH = 133.9894
+PGE_WINTER_PEAK_2026 = 0.39757
+PGE_WINTER_OFFPEAK_2026 = 0.36757
+PGE_GENERATION_CREDIT_2026_04 = 16.47 / BILL_2026_04_NET_KWH
+PCIA_2026_04 = 4.94 / BILL_2026_04_NET_KWH
+WESTLIGHT_WINTER_PEAK_2026 = 0.07683
+WESTLIGHT_WINTER_OFFPEAK_2026 = 0.05282
+
 
 # --- DB-backed lookup -------------------------------------------------------
 

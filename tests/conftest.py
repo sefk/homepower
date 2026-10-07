@@ -29,3 +29,14 @@ def fresh_rate_cache():
     rates.clear_cache()
     yield
     rates.clear_cache()
+
+
+@pytest.fixture
+def no_winter_adjustment(db):
+    """Undo the April 2026 bill's winter CCA adjustment (migration 0004),
+    recreating the gap missing_adjustments() exists to flag."""
+    from datetime import date
+
+    from billing.models import CcaAdjustment
+
+    CcaAdjustment.objects.filter(season="winter", effective_from__gte=date(2026, 3, 1)).delete()

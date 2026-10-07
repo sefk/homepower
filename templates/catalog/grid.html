@@ -118,6 +118,25 @@ summary { cursor: pointer; color: var(--ink-2); font-size: 0.9rem; }
     allowance. The $24/month Base Services Charge (since March 2026) is fixed and not per kWh.
   </p>
 
+  <h2 style="margin: 1rem 0 0.5rem">Winter 2026 rates, built up from the April bill</h2>
+  {% with b=bill_2026_04 %}
+  <table class="data">
+    <tr><th>Component ($/kWh)</th><th>Peak</th><th>Off-peak</th></tr>
+    <tr><td>PG&amp;E net usage (Details of NEM Charges)</td><td>{{ b.pge_peak|floatformat:4 }}</td><td>{{ b.pge_offpeak|floatformat:4 }}</td></tr>
+    <tr><td>Baseline credit, within 9.7 kWh/day</td><td>−{{ b.baseline_credit|floatformat:4 }}</td><td>−{{ b.baseline_credit|floatformat:4 }}</td></tr>
+    <tr><td>PG&amp;E generation credit, spread per kWh</td><td>−{{ b.generation_credit|floatformat:4 }}</td><td>−{{ b.generation_credit|floatformat:4 }}</td></tr>
+    <tr><td>Power Charge Indifference Adjustment, spread per kWh</td><td>{{ b.pcia|floatformat:4 }}</td><td>{{ b.pcia|floatformat:4 }}</td></tr>
+    <tr><td>Generation (billed as Peninsula Clean Energy, now WestLight)</td><td>{{ b.cca_peak|floatformat:4 }}</td><td>{{ b.cca_offpeak|floatformat:4 }}</td></tr>
+  </table>
+  {% endwith %}
+  <p class="small muted">
+    03/18–04/15/2026, the first winter bill after the March 2026 rate change; spread over its 134 net kWh
+    imported. These reproduce the bill to within a cent. The PG&amp;E rates less the baseline credit
+    match what PG&amp;E's own cost data reports (the <code>pge_rates</code> collector). The baseline
+    credit counts here because that month's net usage stayed under the allowance; in a heavy winter
+    month that ends net-importing past it, the marginal kWh would miss the credit and cost about 8¢ more.
+  </p>
+
   <h2 style="margin: 1rem 0 0.5rem">Rates this app uses</h2>
   {% if missing_adjustments %}
   <p class="rate-warning">
