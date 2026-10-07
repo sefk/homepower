@@ -166,6 +166,33 @@ launchctl kickstart -k gui/$(id -u)/com.sefk.homepower
 Expect to redo this if the python interpreter path changes (e.g. a uv
 python upgrade).
 
+## Backups
+
+`manage.py backup_db` writes a gzipped SQLite online backup (consistent
+while the collectors write; ~37 MB, ~4 s) to
+`/Volumes/ext1/homepower_backups/homepower-YYYY-MM-DD.sqlite3.gz`, then
+prunes: every backup from the last 7 days, plus the first of each ISO week
+for a year. It refuses to run if the directory is missing, so an
+unmounted drive fails the job instead of filling the boot disk. A
+LaunchAgent runs it daily at 3:30am (a missed run fires on wake):
+
+```sh
+cp ops/com.sefk.homepower-backup.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.sefk.homepower-backup.plist
+launchctl kickstart gui/$(id -u)/com.sefk.homepower-backup   # run now
+```
+
+Output goes to `var/log/backup.{out,err}.log`.
+
+Like Local Network above, external-drive access is granted per binary:
+the launchd-run python hangs in `open()` on `/Volumes/ext1` until it is
+allowed. **System Settings → Privacy & Security → Files & Folders** →
+python → **Removable Volumes** (or approve the prompt when it appears).
+Redo after a python path change.
+
+Restore: stop the service, `gunzip -c <backup> > db.sqlite3`, delete any
+`db.sqlite3-wal`/`-shm` left beside it, start the service.
+
 ## Eagle 3 uploader (grid source)
 
 The Eagle (10.10.0.216) pushes RFA XML to `POST /ingest/eagle/` via a

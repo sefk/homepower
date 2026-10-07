@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.sefk.homepower-backup</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/uv</string>
+        <string>run</string>
+        <string>--project</string>
+        <string>/Users/sefk/src/homepower</string>
+        <string>python</string>
+        <string>manage.py</string>
+        <string>backup_db</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/sefk/src/homepower</string>
+
+    <!-- Daily at 3:30am; launchd runs a missed one on wake -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>3</integer>
+        <key>Minute</key>
+        <integer>30</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/sefk/src/homepower/var/log/backup.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/sefk/src/homepower/var/log/backup.err.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/bin:/bin</string>
+    </dict>
+</dict>
+</plist>
