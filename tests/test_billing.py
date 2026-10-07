@@ -91,12 +91,21 @@ class TestRateTables:
         assert rates_for(date(2026, 8, 1)) == rates_for(date(2026, 7, 1))
 
     def test_summer_2026_rates_reproduce_the_july_bill(self):
-        # 06/15-07/14/2026: net 9.9592 peak + 161.0737 off-peak kWh exported.
-        # PG&E -$44.79 + WestLight -$11.21, less the -$0.10 franchise fee and
-        # WestLight's -$1.71 net generation bonus = $54.19 of energy value.
-        peak, offpeak = rates_for(date(2026, 7, 1))
-        value = 9.9592 * peak + 161.0737 * offpeak
-        assert value == pytest.approx(44.79 + 11.21 - 0.10 - 1.71, abs=0.10)
+        # 06/15-07/14/2026: net 9.9592 peak + 161.0737 off-peak kWh exported,
+        # split by WestLight's 7/1 rate change into 5.3116/85.906 kWh before
+        # and 4.6476/75.1677 after. PG&E -$44.79 + WestLight -$11.21, less
+        # the -$0.10 franchise fee and WestLight's -$1.71 net generation
+        # bonus = $54.19 of energy value.
+        june_peak, june_offpeak = rates_for(date(2026, 6, 30))
+        july_peak, july_offpeak = rates_for(date(2026, 7, 1))
+        value = (5.3116 * june_peak + 85.906 * june_offpeak
+                 + 4.6476 * july_peak + 75.1677 * july_offpeak)
+        assert value == pytest.approx(44.79 + 11.21 - 0.10 - 1.71, abs=0.01)
+
+    def test_westlight_rate_rises_july_2026(self):
+        june, july = rates_for(date(2026, 6, 30)), rates_for(date(2026, 7, 1))
+        assert july[0] - june[0] == pytest.approx(0.15036 - 0.14048)
+        assert july[1] - june[1] == pytest.approx(0.05251 - 0.04778)
 
     def test_peak_always_at_least_offpeak(self):
         # ev.ChargeSession.savings relies on this to never go negative
@@ -110,8 +119,8 @@ class TestRatePlusAdjustment:
     def test_all_in_is_pge_rate_plus_adjustment(self):
         parts = parts_for(date(2026, 7, 1), "peak")
         assert parts.pge == 0.441
-        assert parts.adjustment == pytest.approx(0.5226 - 0.441, abs=2e-4)
-        assert parts.all_in == pytest.approx(0.5226, abs=2e-4)
+        assert parts.adjustment == pytest.approx(0.5275 - 0.441, abs=2e-4)
+        assert parts.all_in == pytest.approx(0.5275, abs=2e-4)
         assert rates_for(date(2026, 7, 1))[0] == parts.all_in
 
     def test_latest_row_on_or_before_the_date_wins(self):

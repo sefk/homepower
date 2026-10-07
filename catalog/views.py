@@ -445,6 +445,8 @@ def grid(request):
                 "pcia": rates.PCIA_2026,
                 "westlight_peak": rates.WESTLIGHT_SUMMER_PEAK_2026,
                 "westlight_offpeak": rates.WESTLIGHT_SUMMER_OFFPEAK_2026,
+                "westlight_peak_jul": rates.WESTLIGHT_SUMMER_PEAK_2026_07,
+                "westlight_offpeak_jul": rates.WESTLIGHT_SUMMER_OFFPEAK_2026_07,
             },
         },
     )

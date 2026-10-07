@@ -106,12 +106,14 @@ summary { cursor: pointer; color: var(--ink-2); font-size: 0.9rem; }
     <tr><td>Baseline credit, within 9.8 kWh/day (page 6)</td><td>−{{ b.baseline_credit|floatformat:4 }}</td><td>−{{ b.baseline_credit|floatformat:4 }}</td></tr>
     <tr><td>PG&amp;E generation credit, spread per kWh (page 6)</td><td>−{{ b.generation_credit|floatformat:4 }}</td><td>−{{ b.generation_credit|floatformat:4 }}</td></tr>
     <tr><td>Power Charge Indifference Adjustment, spread per kWh (page 6)</td><td>{{ b.pcia|floatformat:4 }}</td><td>{{ b.pcia|floatformat:4 }}</td></tr>
-    <tr><td>WestLight generation (page 7, two mid-cycle rates averaged)</td><td>{{ b.westlight_peak|floatformat:4 }}</td><td>{{ b.westlight_offpeak|floatformat:4 }}</td></tr>
+    <tr><td>WestLight generation, through 6/30 (page 7)</td><td>{{ b.westlight_peak|floatformat:4 }}</td><td>{{ b.westlight_offpeak|floatformat:4 }}</td></tr>
+    <tr><td>WestLight generation, from 7/1 (page 7)</td><td>{{ b.westlight_peak_jul|floatformat:4 }}</td><td>{{ b.westlight_offpeak_jul|floatformat:4 }}</td></tr>
   </table>
   {% endwith %}
   <p class="small muted">
     The bill gives the generation credit and PCIA only as dollar totals, so they're spread evenly over
-    the period's 171 net kWh. Summed, these reproduce the bill to within a few cents. The baseline
+    the period's 171 net kWh. WestLight raised its rate mid-cycle; pricing each of its lines at its
+    own rate, these reproduce the bill to the cent. The baseline
     credit counts every summer kWh because summer months net-export, keeping net usage under the
     allowance. The $24/month Base Services Charge (since March 2026) is fixed and not per kWh.
   </p>

@@ -55,21 +55,24 @@ SEASON_PERIODS = [(s, p) for s in SEASONS for p in PERIODS]
 # generation credit (WestLight supplies generation instead) + PCIA +
 # WestLight's generation rate. The bill gives the generation credit and
 # PCIA only as dollar totals, so they're spread evenly per kWh; WestLight
-# billed two rates mid-cycle, averaged here. The baseline credit applies
-# to net usage under the 9.8 kWh/day allowance -- every summer kWh, since
-# summer months net-export. Check: the bill's 9.96 peak + 161.07 off-peak
-# net kWh at these rates = $54.22, vs. $54.19 billed (PG&E + WestLight,
-# less the franchise fee and WestLight's $0.01/kWh net generation bonus).
+# raised its rate about 7/1, mid-cycle, so the CCA adjustment has a row
+# either side of that date. The baseline credit applies to net usage under
+# the 9.8 kWh/day allowance -- every summer kWh, since summer months
+# net-export. Check: each WestLight line's kWh at its own rate = $54.19,
+# matching the bill (PG&E + WestLight, less the franchise fee and
+# WestLight's $0.01/kWh net generation bonus).
 # Kept for the Grid page's build-up table; the seeded migration
-# (billing/migrations/0002) carries the same arithmetic as literals.
+# (billing/migrations/0003) carries the same arithmetic as literals.
 BILL_2026_07_NET_KWH = 171.0329
 PGE_SUMMER_PEAK_2026 = 0.52240
 PGE_SUMMER_OFFPEAK_2026 = 0.39940
 BASELINE_CREDIT_2026 = 0.08140
 PGE_GENERATION_CREDIT_2026 = 17.23 / BILL_2026_07_NET_KWH
 PCIA_2026 = 6.31 / BILL_2026_07_NET_KWH
-WESTLIGHT_SUMMER_PEAK_2026 = (0.14048 + 0.15036) / 2
-WESTLIGHT_SUMMER_OFFPEAK_2026 = (0.04778 + 0.05251) / 2
+WESTLIGHT_SUMMER_PEAK_2026 = 0.14048  # through 6/30
+WESTLIGHT_SUMMER_OFFPEAK_2026 = 0.04778
+WESTLIGHT_SUMMER_PEAK_2026_07 = 0.15036  # from 7/1
+WESTLIGHT_SUMMER_OFFPEAK_2026_07 = 0.05251
 
 
 # --- DB-backed lookup -------------------------------------------------------

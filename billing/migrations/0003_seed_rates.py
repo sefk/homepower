@@ -11,11 +11,17 @@ from django.db import migrations
 BILL_NET_KWH = 171.0329
 GEN_CREDIT = 17.23 / BILL_NET_KWH
 PCIA = 6.31 / BILL_NET_KWH
-WESTLIGHT_PEAK = (0.14048 + 0.15036) / 2
-WESTLIGHT_OFFPEAK = (0.04778 + 0.05251) / 2
+# WestLight's rate rose mid-cycle: each pair of bill lines is the old rate
+# then the new, splitting the 6/15-7/14 cycle at about 7/1. Pricing each
+# line's kWh at its own rate reproduces the bill to the cent.
+WESTLIGHT_PEAK = 0.14048
+WESTLIGHT_OFFPEAK = 0.04778
+WESTLIGHT_PEAK_JUL = 0.15036
+WESTLIGHT_OFFPEAK_JUL = 0.05251
 
 PRE_2026 = date(2000, 1, 1)
 NEW_ERA = date(2026, 3, 1)
+WESTLIGHT_JUL = date(2026, 7, 1)
 
 # (season, period, effective_from, rate, source): pre-2026 all-in values
 # back-derived from the 2025-26 bills (docs/635-central-energy-analysis-
@@ -44,6 +50,10 @@ ADJUSTMENTS = [
     ("winter", "offpeak", PRE_2026, 0.0, "all-in seed rates include the CCA side"),
     ("summer", "peak", NEW_ERA, -GEN_CREDIT + PCIA + WESTLIGHT_PEAK, "July 2026 bill"),
     ("summer", "offpeak", NEW_ERA, -GEN_CREDIT + PCIA + WESTLIGHT_OFFPEAK, "July 2026 bill"),
+    ("summer", "peak", WESTLIGHT_JUL, -GEN_CREDIT + PCIA + WESTLIGHT_PEAK_JUL,
+     "July 2026 bill, WestLight 7/1 rate"),
+    ("summer", "offpeak", WESTLIGHT_JUL, -GEN_CREDIT + PCIA + WESTLIGHT_OFFPEAK_JUL,
+     "July 2026 bill, WestLight 7/1 rate"),
 ]
 
 
