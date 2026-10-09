@@ -99,8 +99,9 @@ state Grafana owns and git doesn't.
 - **Sink Summary** — a stacked breakdown of where the power goes
   (Unmetered at the bottom, each metered load above it, export on top)
   and a kWh/share table below it. "Where it goes" and "Sent to PG&E"
-  choose the layers (by default every load but the Mac Studio, too small to
-  see; a newly added load starts unchecked here); Aggregate averages the chart into 15-minute to 1-day
+  choose the layers; loads under 2% of house load over the range fold into
+  the bottom layer ("Unmetered + small loads") unless "Split out small
+  loads" is On, while the table always lists each load; Aggregate averages the chart into 15-minute to 1-day
   buckets (Auto: full detail up to 10 days, daily beyond)
 - **Sources and Sinks** — the two together: solar→house, solar→grid and
   grid→house energy, self-sufficiency and self-use, an energy-flow Sankey
