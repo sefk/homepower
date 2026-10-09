@@ -647,6 +647,201 @@
       }
     },
     {
+      "type": "row",
+      "id": 30,
+      "title": "Draw on the 200 A service",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      }
+    },
+    {
+      "type": "gauge",
+      "id": 31,
+      "title": "Peak draw vs. 200 A",
+      "description": "Highest current pulled from PG&E over the selected range, against the 200 A main. The amber mark is 160 A, the 80% a breaker is rated to carry continuously. Amps are the Eagle's whole-house watts over a nominal 240 V, so they assume the two legs are evenly loaded; a heavy 120 V load puts more than this on one leg. Only the Eagle (from Aug 2026) reads fast enough for this — PG&E's hourly history would hide every peak, so earlier ranges show nothing.",
+      "gridPos": {
+        "h": 9,
+        "w": 6,
+        "x": 0,
+        "y": 23
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "SELECT MAX(s.value) / 240.0 AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'eagle' AND se.metric = 'demand_w'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')",
+          "queryText": "SELECT MAX(s.value) / 240.0 AS v\nFROM core_sample s\nJOIN core_series se ON se.id = s.series_id\nJOIN core_source so ON so.id = se.source_id\nWHERE so.slug = 'eagle' AND se.metric = 'demand_w'\n  AND s.ts >= datetime($__from / 1000, 'unixepoch')\n  AND s.ts <  datetime($__to / 1000, 'unixepoch')"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdMarkers": true,
+        "showThresholdLabels": false
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "amp",
+          "decimals": 0,
+          "min": 0,
+          "max": 200,
+          "noValue": "no live meter data",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#2E8B7F",
+                "value": null
+              },
+              {
+                "color": "#E5A23C",
+                "value": 160
+              },
+              {
+                "color": "#C4463A",
+                "value": 200
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 32,
+      "title": "Current through the service — 200 A at the top",
+      "description": "Current at the meter: up toward the 200 A main while the house draws from PG&E, below zero while the arrays push power back. Each point is the peak (or deepest dip) within it. The dashed lines are the 200 A main and 160 A continuous rating. Amps are the Eagle's whole-house watts over a nominal 240 V, so they assume the two legs are evenly loaded; a heavy 120 V load puts more than this on one leg. Only the Eagle (from Aug 2026) reads fast enough for this — PG&E's hourly history would hide every peak, so earlier ranges show nothing.",
+      "gridPos": {
+        "h": 9,
+        "w": 18,
+        "x": 6,
+        "y": 23
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "time series",
+          "timeColumns": [
+            "time"
+          ],
+          "rawQueryText": "WITH a AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / MAX(10, $__interval_ms / 1000)) * MAX(10, $__interval_ms / 1000) AS t,\n         MAX(MAX(s.value, 0)) / 240.0 AS draw,\n         MIN(MIN(s.value, 0)) / 240.0 AS back\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE so.slug = 'eagle' AND se.metric = 'demand_w'\n    AND s.ts >= datetime($__from / 1000, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY 1\n), ticks(t) AS (\n  SELECT ($__from / 1000 / MAX(10, $__interval_ms / 1000)) * MAX(10, $__interval_ms / 1000)\n  UNION ALL\n  SELECT t + MAX(10, $__interval_ms / 1000) FROM ticks WHERE t + MAX(10, $__interval_ms / 1000) < $__to / 1000\n)\n-- The peak and the deepest dip in each bucket, so neither averages away.\nSELECT ticks.t AS time,\n       a.draw AS \"Drawing from PG&E\",\n       a.back AS \"Sending back\"\nFROM ticks\nLEFT JOIN a ON a.t = ticks.t\nORDER BY 1",
+          "queryText": "WITH a AS (\n  SELECT (CAST(strftime('%s', s.ts) AS INTEGER) / MAX(10, $__interval_ms / 1000)) * MAX(10, $__interval_ms / 1000) AS t,\n         MAX(MAX(s.value, 0)) / 240.0 AS draw,\n         MIN(MIN(s.value, 0)) / 240.0 AS back\n  FROM core_sample s\n  JOIN core_series se ON se.id = s.series_id\n  JOIN core_source so ON so.id = se.source_id\n  WHERE so.slug = 'eagle' AND se.metric = 'demand_w'\n    AND s.ts >= datetime($__from / 1000, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n  GROUP BY 1\n), ticks(t) AS (\n  SELECT ($__from / 1000 / MAX(10, $__interval_ms / 1000)) * MAX(10, $__interval_ms / 1000)\n  UNION ALL\n  SELECT t + MAX(10, $__interval_ms / 1000) FROM ticks WHERE t + MAX(10, $__interval_ms / 1000) < $__to / 1000\n)\n-- The peak and the deepest dip in each bucket, so neither averages away.\nSELECT ticks.t AS time,\n       a.draw AS \"Drawing from PG&E\",\n       a.back AS \"Sending back\"\nFROM ticks\nLEFT JOIN a ON a.t = ticks.t\nORDER BY 1"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "amp",
+          "decimals": 0,
+          "max": 200,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "#E5A23C",
+                "value": 160
+              },
+              {
+                "color": "#C4463A",
+                "value": 200
+              }
+            ]
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 45,
+            "showPoints": "never",
+            "spanNulls": false,
+            "gradientMode": "none",
+            "lineInterpolation": "stepAfter",
+            "axisCenteredZero": false,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Drawing from PG&E"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#C4463A"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Sending back"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#2E8B7F"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "type": "timeseries",
       "id": 20,
       "title": "$series",
@@ -658,7 +853,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 22
+        "y": 32
       },
       "datasource": {
         "type": "frser-sqlite-datasource",

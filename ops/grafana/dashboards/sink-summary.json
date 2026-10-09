@@ -36,7 +36,7 @@
           "type": "frser-sqlite-datasource",
           "uid": "homepower-sqlite"
         },
-        "query": "SELECT 'Unmetered' UNION ALL SELECT name FROM (SELECT DISTINCT so.name AS name FROM core_series se JOIN core_source so ON so.id = se.source_id WHERE so.kind NOT IN ('solar', 'grid', 'gas') AND se.unit = 'W' ORDER BY 1)",
+        "query": "SELECT 'Unmetered' UNION ALL SELECT name FROM (SELECT DISTINCT so.name AS name FROM core_series se JOIN core_source so ON so.id = se.source_id WHERE so.kind NOT IN ('solar', 'grid', 'gas') AND se.unit = 'W' ORDER BY so.name LIKE '%(estimated)%', 1)",
         "refresh": 1,
         "multi": true,
         "includeAll": true,
@@ -144,7 +144,7 @@
       "type": "timeseries",
       "id": 1,
       "title": "Use — where the power is going",
-      "description": "Where the power goes, stacked: Unmetered at the bottom (house load less every metered load), each metered load above it, and power sent to PG&E on top when 'Sent to PG&E' is set to Show. Pick layers with 'Where it goes' at the top of the page. House load is not metered: it is solar production plus grid power, per quarter-hour, and only counts once the grid meter and (in daylight) the main array have both reported, so the newest quarter-hour is usually blank. A metered load with no reading in a bucket counts as 0 there, and its power shows up in Unmetered. Aggregate averages the breakdown into 15-minute to 1-day buckets; Auto keeps full detail up to 10 days and shows daily averages beyond.",
+      "description": "Where the power goes, stacked: Unmetered at the bottom (house load less every metered load), each metered load above it, and power sent to PG&E on top when 'Sent to PG&E' is set to Show. Pick layers with 'Where it goes' at the top of the page. House load is not metered: it is solar production plus grid power, per quarter-hour, and only counts once the grid meter and (in daylight) the main array have both reported, so the newest quarter-hour is usually blank. A metered load with no reading in a bucket counts as 0 there, and its power shows up in Unmetered. Aggregate averages the breakdown into 15-minute to 1-day buckets; Auto keeps full detail up to 10 days and shows daily averages beyond. Layers marked (estimated) aren't metered: they're derived from step changes in the whole-home meter and drawn dashed.",
       "gridPos": {
         "h": 13,
         "w": 24,
@@ -232,6 +232,28 @@
                   "mode": "fixed",
                   "fixedColor": "#2E8B7F"
                 }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*\\(estimated\\).*"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    10
+                  ]
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 15
               }
             ]
           }

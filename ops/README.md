@@ -92,10 +92,9 @@ state Grafana owns and git doesn't.
   load on its own chart (the Tesla, the Mac Studio and the water heater;
   any non-solar/grid/gas power series joins automatically, and the Loads
   picker at the top chooses which to show), a load histogram, a
-  typical-day profile and an hour-by-day heatmap of house load; then the
-  current through the 200 A service (watts over a nominal 240 V, peak per
-  point) against the main and its 160 A continuous rating, exports dipping
-  below zero
+  typical-day profile and an hour-by-day heatmap of house load. Loads
+  marked (estimated), like the hot tub, are derived from whole-home meter
+  step changes rather than metered, and draw dashed
 - **Sink Summary** — a stacked breakdown of where the power goes
   (Unmetered at the bottom, each metered load above it, export on top)
   and a kWh/share table below it. "Where it goes" and "Sent to PG&E"
@@ -110,7 +109,9 @@ state Grafana owns and git doesn't.
   (this year in colour, last year lighter, earlier years grey), and this
   month to date against last month as a table and running totals
 - **Live Power** (also the home dashboard) — solar vs. grid at native
-  resolution, 10s refresh, today's kWh
+  resolution, 10s refresh, today's kWh; then the current through the 200 A
+  service (watts over a nominal 240 V, peak per point) against the main
+  and its 160 A continuous rating, exports dipping below zero
 - **Gas** — therms over the range (daily, weekly or monthly bars by
   range), summer baseline, and gas by month year over year. Daily
   readings, 1–2 days behind (PG&E's posting lag)
