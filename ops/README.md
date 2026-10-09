@@ -88,12 +88,7 @@ state Grafana owns and git doesn't.
   and stacked over time; per-kW array comparison; monthly and yearly
   production over all backfilled history
 - **Sinks** — where it goes: house load (derived as solar + grid) and
-  export, the always-on floor, the 4–9pm share, a stacked breakdown of
-  where the power goes (Unmetered at the bottom, each metered load above
-  it, export on top) with a kWh/share table beside it — the "Where it
-  goes" and "Sent to PG&E" pickers choose the layers, and Aggregate
-  averages it into 15-minute to 1-day buckets (Auto: full detail up to
-  10 days, daily beyond) — each separately metered
+  export, the always-on floor, the 4–9pm share, each separately metered
   load on its own chart (the Tesla, the Mac Studio and the water heater;
   any non-solar/grid/gas power series joins automatically, and the Loads
   picker at the top chooses which to show), a load histogram, a
@@ -101,6 +96,11 @@ state Grafana owns and git doesn't.
   current through the 200 A service (watts over a nominal 240 V, peak per
   point) against the main and its 160 A continuous rating, exports dipping
   below zero
+- **Sink Summary** — a stacked breakdown of where the power goes
+  (Unmetered at the bottom, each metered load above it, export on top)
+  and a kWh/share table below it. "Where it goes" and "Sent to PG&E"
+  choose the layers; Aggregate averages the chart into 15-minute to 1-day
+  buckets (Auto: full detail up to 10 days, daily beyond)
 - **Sources and Sinks** — the two together: solar→house, solar→grid and
   grid→house energy, self-sufficiency and self-use, an energy-flow Sankey
   (kWh from each array and the grid to the house and back out), a mirrored balance
