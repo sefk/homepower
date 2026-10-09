@@ -45,6 +45,45 @@
           "value": "$__all"
         },
         "options": []
+      },
+      {
+        "name": "agg",
+        "label": "Aggregate",
+        "type": "custom",
+        "query": "Auto : auto,15 min : 15m,1 hour : 1h,6 hours : 6h,1 day : 1d",
+        "multi": false,
+        "includeAll": false,
+        "current": {
+          "text": "Auto",
+          "value": "auto"
+        },
+        "options": [
+          {
+            "text": "Auto",
+            "value": "auto",
+            "selected": true
+          },
+          {
+            "text": "15 min",
+            "value": "15m",
+            "selected": false
+          },
+          {
+            "text": "1 hour",
+            "value": "1h",
+            "selected": false
+          },
+          {
+            "text": "6 hours",
+            "value": "6h",
+            "selected": false
+          },
+          {
+            "text": "1 day",
+            "value": "1d",
+            "selected": false
+          }
+        ]
       }
     ]
   },
@@ -697,7 +736,7 @@
       "type": "timeseries",
       "id": 16,
       "title": "${loads}",
-      "description": "Power drawn by one load with its own meter. Each metered load gets its own chart, since a computer's watts and a car charger's kilowatts can't share an axis; pick which ones with Loads at the top. Appliances join as their collectors are added, with no dashboard edit. Each point is the average over its stretch of time; a gap means that load wasn't read, not that it was off. A load marked (estimated) has no meter of its own: it is derived from step changes in the whole-home meter, drawn dashed.",
+      "description": "Power drawn by one load with its own meter. Each metered load gets its own chart, since a computer's watts and a car charger's kilowatts can't share an axis; pick which ones with Loads at the top. Appliances join as their collectors are added, with no dashboard edit. Each point is the average over its stretch of time; a gap means that load wasn't read, not that it was off. A load marked (estimated) has no meter of its own: it is derived from step changes in the whole-home meter. Aggregate at the top averages each chart into 15-minute to 1-day buckets; Auto keeps full detail up to 10 days and shows daily averages beyond.",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -719,8 +758,8 @@
           "timeColumns": [
             "time"
           ],
-          "rawQueryText": "WITH loads AS (\n  -- Every metered load: any power series that isn't a source of energy\n  -- or the grid meter. New appliance collectors appear here on their own.\n  SELECT se.id AS series_id, so.name AS name\n  FROM core_series se\n  JOIN core_source so ON so.id = se.source_id\n  WHERE so.kind NOT IN ('solar', 'grid', 'gas') AND se.unit = 'W'\n    AND so.name IN (${loads:sqlstring})\n), k AS (\n  SELECT MAX(300, $__interval_ms / 1000) AS step\n), ticks(t) AS (\n  SELECT ($__from / 1000 / (SELECT step FROM k)) * (SELECT step FROM k)\n  UNION ALL\n  SELECT t + (SELECT step FROM k) FROM ticks WHERE t + (SELECT step FROM k) < $__to / 1000\n), x AS (\n  SELECT s.series_id, CAST(strftime('%s', s.ts) AS INTEGER) AS st,\n         CAST(strftime('%s', s.ts) AS INTEGER) + s.duration_s AS en, s.value\n  FROM core_sample s\n  JOIN loads l ON l.series_id = s.series_id\n  WHERE s.ts >= datetime($__from / 1000 - 86400, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n)\n-- Each point is the mean over the part of its bucket the samples cover\n-- (a 30-minute reading spans several 5-minute buckets); no sample at all\n-- leaves a gap.\nSELECT ticks.t AS time, l.name AS load,\n       SUM(x.value * (MIN(x.en, ticks.t + k.step) - MAX(x.st, ticks.t)))\n         / SUM(MIN(x.en, ticks.t + k.step) - MAX(x.st, ticks.t)) AS value\nFROM ticks\nCROSS JOIN k\nCROSS JOIN loads l\nLEFT JOIN x ON x.series_id = l.series_id AND x.st < ticks.t + k.step AND x.en > ticks.t\nGROUP BY 1, 2\nORDER BY 1, 2",
-          "queryText": "WITH loads AS (\n  -- Every metered load: any power series that isn't a source of energy\n  -- or the grid meter. New appliance collectors appear here on their own.\n  SELECT se.id AS series_id, so.name AS name\n  FROM core_series se\n  JOIN core_source so ON so.id = se.source_id\n  WHERE so.kind NOT IN ('solar', 'grid', 'gas') AND se.unit = 'W'\n    AND so.name IN (${loads:sqlstring})\n), k AS (\n  SELECT MAX(300, $__interval_ms / 1000) AS step\n), ticks(t) AS (\n  SELECT ($__from / 1000 / (SELECT step FROM k)) * (SELECT step FROM k)\n  UNION ALL\n  SELECT t + (SELECT step FROM k) FROM ticks WHERE t + (SELECT step FROM k) < $__to / 1000\n), x AS (\n  SELECT s.series_id, CAST(strftime('%s', s.ts) AS INTEGER) AS st,\n         CAST(strftime('%s', s.ts) AS INTEGER) + s.duration_s AS en, s.value\n  FROM core_sample s\n  JOIN loads l ON l.series_id = s.series_id\n  WHERE s.ts >= datetime($__from / 1000 - 86400, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n)\n-- Each point is the mean over the part of its bucket the samples cover\n-- (a 30-minute reading spans several 5-minute buckets); no sample at all\n-- leaves a gap.\nSELECT ticks.t AS time, l.name AS load,\n       SUM(x.value * (MIN(x.en, ticks.t + k.step) - MAX(x.st, ticks.t)))\n         / SUM(MIN(x.en, ticks.t + k.step) - MAX(x.st, ticks.t)) AS value\nFROM ticks\nCROSS JOIN k\nCROSS JOIN loads l\nLEFT JOIN x ON x.series_id = l.series_id AND x.st < ticks.t + k.step AND x.en > ticks.t\nGROUP BY 1, 2\nORDER BY 1, 2"
+          "rawQueryText": "WITH loads AS (\n  -- Every metered load: any power series that isn't a source of energy\n  -- or the grid meter. New appliance collectors appear here on their own.\n  SELECT se.id AS series_id, so.name AS name\n  FROM core_series se\n  JOIN core_source so ON so.id = se.source_id\n  WHERE so.kind NOT IN ('solar', 'grid', 'gas') AND se.unit = 'W'\n    AND so.name IN (${loads:sqlstring})\n), k AS (\n  -- Bucket size: the Aggregate picker, or Auto -- 5 minutes or the panel's\n  -- own resolution up to 10 days, a day beyond. Buckets align to local\n  -- midnight using today's UTC offset (an hour off across a DST change).\n  SELECT CASE '${agg}'\n           WHEN '15m' THEN 900 WHEN '1h' THEN 3600\n           WHEN '6h' THEN 21600 WHEN '1d' THEN 86400\n           ELSE CASE WHEN $__to - $__from > 10 * 86400000 THEN 86400\n                     ELSE MAX(300, $__interval_ms / 1000) END\n         END AS step,\n         CAST(strftime('%s', 'now', 'localtime') AS INTEGER)\n           - CAST(strftime('%s', 'now') AS INTEGER) AS off\n), ticks(t) AS (\n  SELECT (($__from / 1000 + (SELECT off FROM k)) / (SELECT step FROM k)) * (SELECT step FROM k)\n         - (SELECT off FROM k)\n  UNION ALL\n  SELECT t + (SELECT step FROM k) FROM ticks WHERE t + (SELECT step FROM k) < $__to / 1000\n), x AS (\n  SELECT s.series_id, CAST(strftime('%s', s.ts) AS INTEGER) AS st,\n         CAST(strftime('%s', s.ts) AS INTEGER) + s.duration_s AS en, s.value\n  FROM core_sample s\n  JOIN loads l ON l.series_id = s.series_id\n  WHERE s.ts >= datetime($__from / 1000 - 2 * 86400, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n)\n-- Each point is the mean over the part of its bucket the samples cover\n-- (a 30-minute reading spans several 5-minute buckets); no sample at all\n-- leaves a gap.\nSELECT ticks.t AS time, l.name AS load,\n       SUM(x.value * (MIN(x.en, ticks.t + k.step) - MAX(x.st, ticks.t)))\n         / SUM(MIN(x.en, ticks.t + k.step) - MAX(x.st, ticks.t)) AS value\nFROM ticks\nCROSS JOIN k\nCROSS JOIN loads l\nLEFT JOIN x ON x.series_id = l.series_id AND x.st < ticks.t + k.step AND x.en > ticks.t\nGROUP BY 1, 2\nORDER BY 1, 2",
+          "queryText": "WITH loads AS (\n  -- Every metered load: any power series that isn't a source of energy\n  -- or the grid meter. New appliance collectors appear here on their own.\n  SELECT se.id AS series_id, so.name AS name\n  FROM core_series se\n  JOIN core_source so ON so.id = se.source_id\n  WHERE so.kind NOT IN ('solar', 'grid', 'gas') AND se.unit = 'W'\n    AND so.name IN (${loads:sqlstring})\n), k AS (\n  -- Bucket size: the Aggregate picker, or Auto -- 5 minutes or the panel's\n  -- own resolution up to 10 days, a day beyond. Buckets align to local\n  -- midnight using today's UTC offset (an hour off across a DST change).\n  SELECT CASE '${agg}'\n           WHEN '15m' THEN 900 WHEN '1h' THEN 3600\n           WHEN '6h' THEN 21600 WHEN '1d' THEN 86400\n           ELSE CASE WHEN $__to - $__from > 10 * 86400000 THEN 86400\n                     ELSE MAX(300, $__interval_ms / 1000) END\n         END AS step,\n         CAST(strftime('%s', 'now', 'localtime') AS INTEGER)\n           - CAST(strftime('%s', 'now') AS INTEGER) AS off\n), ticks(t) AS (\n  SELECT (($__from / 1000 + (SELECT off FROM k)) / (SELECT step FROM k)) * (SELECT step FROM k)\n         - (SELECT off FROM k)\n  UNION ALL\n  SELECT t + (SELECT step FROM k) FROM ticks WHERE t + (SELECT step FROM k) < $__to / 1000\n), x AS (\n  SELECT s.series_id, CAST(strftime('%s', s.ts) AS INTEGER) AS st,\n         CAST(strftime('%s', s.ts) AS INTEGER) + s.duration_s AS en, s.value\n  FROM core_sample s\n  JOIN loads l ON l.series_id = s.series_id\n  WHERE s.ts >= datetime($__from / 1000 - 2 * 86400, 'unixepoch')\n    AND s.ts <  datetime($__to / 1000, 'unixepoch')\n)\n-- Each point is the mean over the part of its bucket the samples cover\n-- (a 30-minute reading spans several 5-minute buckets); no sample at all\n-- leaves a gap.\nSELECT ticks.t AS time, l.name AS load,\n       SUM(x.value * (MIN(x.en, ticks.t + k.step) - MAX(x.st, ticks.t)))\n         / SUM(MIN(x.en, ticks.t + k.step) - MAX(x.st, ticks.t)) AS value\nFROM ticks\nCROSS JOIN k\nCROSS JOIN loads l\nLEFT JOIN x ON x.series_id = l.series_id AND x.st < ticks.t + k.step AND x.en > ticks.t\nGROUP BY 1, 2\nORDER BY 1, 2"
         }
       ],
       "options": {
@@ -758,30 +797,7 @@
             "axisCenteredZero": false
           }
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": ".*\\(estimated\\).*"
-            },
-            "properties": [
-              {
-                "id": "custom.lineStyle",
-                "value": {
-                  "fill": "dash",
-                  "dash": [
-                    10,
-                    10
-                  ]
-                }
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 15
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "repeat": "loads",
       "repeatDirection": "h",

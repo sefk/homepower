@@ -91,14 +91,16 @@ state Grafana owns and git doesn't.
   export, the always-on floor, the 4–9pm share, each separately metered
   load on its own chart (the Tesla, the Mac Studio and the water heater;
   any non-solar/grid/gas power series joins automatically, and the Loads
-  picker at the top chooses which to show), a load histogram, a
-  typical-day profile and an hour-by-day heatmap of house load. Loads
-  marked (estimated), like the hot tub, are derived from whole-home meter
-  step changes rather than metered, and draw dashed
+  picker at the top chooses which to show; Aggregate averages them into
+  15-minute to 1-day buckets, Auto going daily beyond 10 days), a load
+  histogram, a typical-day profile and an hour-by-day heatmap of house
+  load. Loads marked (estimated), like the hot tub, are derived from
+  whole-home meter step changes rather than metered
 - **Sink Summary** — a stacked breakdown of where the power goes
   (Unmetered at the bottom, each metered load above it, export on top)
   and a kWh/share table below it. "Where it goes" and "Sent to PG&E"
-  choose the layers; Aggregate averages the chart into 15-minute to 1-day
+  choose the layers (by default every load but the Mac Studio, too small to
+  see; a newly added load starts unchecked here); Aggregate averages the chart into 15-minute to 1-day
   buckets (Auto: full detail up to 10 days, daily beyond)
 - **Sources and Sinks** — the two together: solar→house, solar→grid and
   grid→house energy, self-sufficiency and self-use, an energy-flow Sankey
