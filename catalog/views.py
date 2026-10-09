@@ -236,12 +236,14 @@ def health(request):
                 "push": source.slug == "eagle",  # push sources have no poll loop
                 "series_rows": series_rows,
                 "last_sample": last_sample,
-                "last_run": source.runs.order_by("-started").first() if not series_rows else None,
+                "last_run": source.runs.order_by("-started").first() if not series_rows or source.kind == Source.Kind.ESTIMATE else None,
                 "stale": (
                     # A source that writes no samples (pge_rates writes rate
-                    # rows) is only as fresh as its last good run.
+                    # rows) is only as fresh as its last good run -- and so is
+                    # a derived estimate, whose newest sample is the start of
+                    # a segment that may be hours long.
                     (last_ok is None or now - last_ok.started > stale_after)
-                    if not series_rows
+                    if not series_rows or source.kind == Source.Kind.ESTIMATE
                     else last_sample is None or now - last_sample.ts > stale_after
                 ),
                 "failures": list(failures.order_by("-started")[:5]),

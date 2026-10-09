@@ -9,6 +9,7 @@ from django.conf import settings
 
 from .base import Collector
 from .envoy import EnvoyCollector
+from .hottub_estimate import HotTubEstimateCollector
 from .macmon import MacmonCollector
 from .navien import NavienCollector
 from .pge import PgeGasCollector
@@ -96,4 +97,6 @@ def enabled_collectors() -> list[Collector]:
         collectors.append(MacmonCollector(macmon_path=settings.MACMON_PATH))
     else:
         logger.warning("studio: macmon not installed, collector disabled")
+    # Derived from the database alone: always on, no credentials.
+    collectors.append(HotTubEstimateCollector())
     return collectors
