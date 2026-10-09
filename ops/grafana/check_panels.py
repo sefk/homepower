@@ -30,6 +30,8 @@ VARS = {
     "$grid": "eagle/demand_w",
     "$series": "eagle/demand_w",
     "${loads:sqlstring}": "'Tesla','Mac Studio'",
+    "${stack:sqlstring}": "'Unmetered','Tesla','Mac Studio','Water Heater'",
+    "${export}": "Show",
     "$__from": str(FROM_MS),
     "$__to": str(NOW_MS),
     "$__interval_ms": "900000",
@@ -86,6 +88,8 @@ def main():
         dashboard = json.loads(path.read_text())
         print(f"\n=== {dashboard['title']}")
         for variable in dashboard.get("templating", {}).get("list", []):
+            if variable.get("type") != "query":
+                continue  # custom/constant: a fixed list, no SQL to run
             failures += not check(
                 f"var {variable['name']}", variable["datasource"], variable["query"]
             )
