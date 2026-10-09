@@ -32,6 +32,7 @@ VARS = {
     "${loads:sqlstring}": "'Tesla','Mac Studio'",
     "${stack:sqlstring}": "'Unmetered','Tesla','Mac Studio','Water Heater'",
     "${export}": "Show",
+    "${agg}": "auto",
     "$__from": str(FROM_MS),
     "$__to": str(NOW_MS),
     "$__interval_ms": "900000",

@@ -91,7 +91,9 @@ state Grafana owns and git doesn't.
   export, the always-on floor, the 4–9pm share, a stacked breakdown of
   where the power goes (Unmetered at the bottom, each metered load above
   it, export on top) with a kWh/share table beside it — the "Where it
-  goes" and "Sent to PG&E" pickers choose the layers — each separately metered
+  goes" and "Sent to PG&E" pickers choose the layers, and Aggregate
+  averages it into 15-minute to 1-day buckets (Auto: full detail up to
+  10 days, daily beyond) — each separately metered
   load on its own chart (the Tesla, the Mac Studio and the water heater;
   any non-solar/grid/gas power series joins automatically, and the Loads
   picker at the top chooses which to show), a load histogram, a
