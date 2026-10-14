@@ -18,3 +18,6 @@ db.sqlite3-*
 
 # Utility bills (account numbers)
 *.pdf
+
+# Stray file Django/SQLite can leave when the in-memory test DB URI is opened as a path
+file:memorydb_*
