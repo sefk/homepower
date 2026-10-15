@@ -29,7 +29,7 @@ VARS = {
     "$solar": "envoy/production_w",
     "$grid": "eagle/demand_w",
     "$series": "eagle/demand_w",
-    "${loads:sqlstring}": "'Tesla','Mac Studio'",
+    "${loads:sqlstring}": "'Tesla','Mac Studio','Network Closet'",
     "${stack:sqlstring}": "'Unmetered','Tesla','Mac Studio','Water Heater'",
     "${export}": "Show",
     "${agg}": "auto",

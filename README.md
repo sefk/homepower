@@ -19,7 +19,10 @@ every minute, and stays disabled if macmon isn't installed. The **Navien
 collector** reads the heat pump water heater's draw (compressor and
 elements) each minute over the NaviLink app's MQTT channel, through the
 unofficial [nwp500-python][nwp500]; it stays disabled until its login is
-set. The **PG&E rates collector** (`pge_rates`, daily, same `PGE_USERNAME`
+set. The **Network Closet collector** reads the UPS behind the switch and
+the Synology over NUT (port 3493) from the Synology, every minute, and
+derives watts from the UPS's load percent; it stays disabled until
+`NUT_HOST` is set. The **PG&E rates collector** (`pge_rates`, daily, same `PGE_USERNAME`
 login as gas) reads PG&E's TOU rates back out of its cost data and
 records each rate change with its effective date, so cost views price
 every hour at the rate in force then.
@@ -49,7 +52,9 @@ PGE_USERNAME=you@example.com       # pge.com login, for gas; then run `manage.py
 PGE_PASSWORD=...
 NAVIEN_USERNAME=you@example.com    # NaviLink app login (water heater)
 NAVIEN_PASSWORD=...
+NUT_HOST=synology.local            # Synology's UPS server; this host must be under DSM's UPS > Permitted DiskStation Devices
 # optional overrides:
+# NUT_UPS_NAME=ups
 # ENVOY_HOST=10.10.0.222
 # HOMEPOWER_PORT=8425
 # MACMON_PATH=/opt/homebrew/bin/macmon
@@ -114,6 +119,16 @@ For boot-time operation under `launchd`, see [ops/README.md][ops].
 | `ops/` | launchd plists, install notes, Grafana config and dashboards |
 | `docs/prd/homepower/` | PRD and discovery notes |
 | `var/` | runtime state: logs, cached vendor tokens (gitignored) |
+
+## Future work
+
+- **UPS page.** The Network Closet collector already stores the UPS's
+  load percent, battery charge, runtime, input voltage and on-line flag
+  alongside the derived `closet/power_w`, but only the power series is
+  charted (on Sinks). A dedicated page could show battery health, line
+  voltage sags and time spent on battery. The battery install date is
+  unset on the UPS (reads 2001), and the unit dates from 2017, so
+  runtime trend is the thing to watch.
 
 ## Design notes
 

@@ -12,6 +12,7 @@ from .envoy import EnvoyCollector
 from .hottub_estimate import HotTubEstimateCollector
 from .macmon import MacmonCollector
 from .navien import NavienCollector
+from .nut import NutCollector
 from .pge import PgeGasCollector
 from .pge_rates import PgeRatesCollector
 from .solaredge import SolarEdgeCollector
@@ -97,6 +98,12 @@ def enabled_collectors() -> list[Collector]:
         collectors.append(MacmonCollector(macmon_path=settings.MACMON_PATH))
     else:
         logger.warning("studio: macmon not installed, collector disabled")
+    if settings.NUT_HOST:
+        collectors.append(
+            NutCollector(host=settings.NUT_HOST, ups=settings.NUT_UPS_NAME)
+        )
+    else:
+        logger.warning("closet: no NUT_HOST in .env, collector disabled")
     # Derived from the database alone: always on, no credentials.
     collectors.append(HotTubEstimateCollector())
     return collectors

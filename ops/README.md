@@ -89,7 +89,7 @@ state Grafana owns and git doesn't.
   production over all backfilled history
 - **Sinks** — where it goes: house load (derived as solar + grid) and
   export, the always-on floor, the 4–9pm share, each separately metered
-  load on its own chart (the Tesla, the Mac Studio and the water heater;
+  load on its own chart (the Tesla, the Mac Studio, the network closet's UPS and the water heater;
   any non-solar/grid/gas power series joins automatically, and the Loads
   picker at the top chooses which to show; Aggregate averages them into
   15-minute to 1-day buckets, Auto going daily beyond 10 days), a load

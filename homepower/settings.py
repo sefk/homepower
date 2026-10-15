@@ -126,6 +126,12 @@ MACMON_PATH = (
     or ""
 )
 
+# Network Closet: the UPS behind the switch and the Synology, read over
+# NUT (port 3493) from the Synology. This host's IP must be under DSM's
+# UPS → Permitted DiskStation Devices. Blank host disables the collector.
+NUT_HOST = os.environ.get("NUT_HOST", "")
+NUT_UPS_NAME = os.environ.get("NUT_UPS_NAME", "ups")
+
 # PG&E (gas). pge.com login, read through the opower library. PG&E texts
 # or emails a code on first sign-in; `manage.py pge_auth` takes it once and
 # saves the remembered-device cookie to PGE_LOGIN_FILE. Leave blank to
