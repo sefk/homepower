@@ -7,7 +7,13 @@ from datetime import date, timedelta
 import pytest
 from django.core.management import CommandError, call_command
 
-from core.management.commands.backup_db import backup_day, backup_name, to_prune
+from core.management.commands.backup_db import (
+    backup_day,
+    backup_name,
+    mirror,
+    prune,
+    to_prune,
+)
 from core.models import Milestone
 
 TODAY = date(2026, 10, 7)  # a Wednesday
@@ -51,7 +57,7 @@ class TestToPrune:
 class TestCommand:
     def test_writes_a_restorable_backup(self, tmp_path):
         Milestone.objects.create(date=TODAY, label="backup test")
-        call_command("backup_db", dest=tmp_path)
+        call_command("backup_db", dest=tmp_path, no_archive=True)
         (backup,) = tmp_path.iterdir()
         restored = tmp_path / "restored.sqlite3"
         restored.write_bytes(gzip.decompress(backup.read_bytes()))
@@ -65,10 +71,60 @@ class TestCommand:
         old.write_bytes(b"")
         other = tmp_path / "keep-me.txt"
         other.write_bytes(b"")
-        call_command("backup_db", dest=tmp_path)
+        call_command("backup_db", dest=tmp_path, no_archive=True)
         assert not old.exists()
         assert other.exists()
 
     def test_refuses_missing_destination(self, tmp_path):
         with pytest.raises(CommandError, match="not mounted"):
-            call_command("backup_db", dest=tmp_path / "nope")
+            call_command("backup_db", dest=tmp_path / "nope", no_archive=True)
+
+
+class TestArchive:
+    def test_mirror_copies_and_leaves_no_partial(self, tmp_path):
+        src = tmp_path / backup_name(TODAY)
+        src.write_bytes(b"data")
+        mirror(src, tmp_path / "share" / "homepower")
+        copied = list((tmp_path / "share" / "homepower").iterdir())
+        assert [p.name for p in copied] == [src.name]
+        assert copied[0].read_bytes() == b"data"
+
+    def test_prune_applies_the_same_schedule(self, tmp_path):
+        old = tmp_path / backup_name(date(2020, 1, 6))
+        old.write_bytes(b"")
+        recent = tmp_path / backup_name(TODAY)
+        recent.write_bytes(b"")
+        assert prune(tmp_path, TODAY) == [old.name]
+        assert recent.exists()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_unreachable_share_fails_after_local_backup(tmp_path, monkeypatch):
+    import subprocess
+
+    from core.management.commands import backup_db
+
+    monkeypatch.setattr(
+        backup_db.subprocess, "run",
+        lambda *a, **k: subprocess.CompletedProcess(a, 64, "", "no route"),
+    )
+    with pytest.raises(CommandError, match="could not mount"):
+        call_command("backup_db", dest=tmp_path)
+    assert len(list(tmp_path.iterdir())) == 1  # local backup stands
+
+
+def test_existing_mount_matches_share_case_insensitively(monkeypatch):
+    import subprocess
+
+    from core.management.commands import backup_db
+
+    listing = (
+        "//GUEST:@synology.local/Archive on /Users/x/mnt (smbfs, nodev)\n"
+        "//GUEST:@Synology._smb._tcp.local./Backup on /Volumes/tm (smbfs)\n"
+    )
+    monkeypatch.setattr(
+        backup_db.subprocess, "run",
+        lambda *a, **k: subprocess.CompletedProcess(a, 0, listing, ""),
+    )
+    assert str(backup_db.existing_mount("//GUEST@Synology.local/archive")) == "/Users/x/mnt"
+    assert backup_db.existing_mount("//GUEST@synology.local/Other") is None

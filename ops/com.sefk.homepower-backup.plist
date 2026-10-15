@@ -20,13 +20,13 @@
     <key>WorkingDirectory</key>
     <string>/Users/sefk/src/homepower</string>
 
-    <!-- Daily at 3:30am; launchd runs a missed one on wake -->
+    <!-- Daily at 3:45am (after claude-backup's 3:30 run, which uses the same share); launchd runs a missed one on wake -->
     <key>StartCalendarInterval</key>
     <dict>
         <key>Hour</key>
         <integer>3</integer>
         <key>Minute</key>
-        <integer>30</integer>
+        <integer>45</integer>
     </dict>
 
     <key>StandardOutPath</key>

@@ -182,8 +182,14 @@ while the collectors write; ~37 MB, ~4 s) to
 `/Volumes/ext1/homepower_backups/homepower-YYYY-MM-DD.sqlite3.gz`, then
 prunes: every backup from the last 7 days, plus the first of each ISO week
 for a year. It refuses to run if the directory is missing, so an
-unmounted drive fails the job instead of filling the boot disk. A
-LaunchAgent runs it daily at 3:30am (a missed run fires on wake):
+unmounted drive fails the job instead of filling the boot disk. Each
+backup is then copied to the Synology's `Archive` share under `homepower/`
+(unencrypted; the NAS mirrors that share offsite), with the same
+retention. The share is mounted for the copy, or an existing mount (Finder,
+`claude-backup`) is reused; if the NAS is unreachable the local backup
+stands and the job exits non-zero. `--no-archive` skips the copy. A
+LaunchAgent runs it daily at 3:45am, after `claude-backup`'s 3:30 run on
+the same share (a missed run fires on wake):
 
 ```sh
 cp ops/com.sefk.homepower-backup.plist ~/Library/LaunchAgents/
@@ -199,7 +205,7 @@ allowed. **System Settings → Privacy & Security → Files & Folders** →
 python → **Removable Volumes** (or approve the prompt when it appears).
 Redo after a python path change.
 
-Restore: stop the service, `gunzip -c <backup> > db.sqlite3`, delete any
+Restore (from either copy): stop the service, `gunzip -c <backup> > db.sqlite3`, delete any
 `db.sqlite3-wal`/`-shm` left beside it, start the service.
 
 ## Eagle 3 uploader (grid source)
