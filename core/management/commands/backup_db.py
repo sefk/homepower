@@ -99,7 +99,7 @@ def existing_mount(share: str) -> Path | None:
     claude-backup has to be reused."""
     want = share.split("@")[-1].removeprefix("//").lower()
     out = subprocess.run(
-        ["mount", "-t", "smbfs"], capture_output=True, text=True
+        ["/sbin/mount", "-t", "smbfs"], capture_output=True, text=True
     ).stdout
     for line in out.splitlines():
         spec, _, rest = line.partition(" on ")
@@ -115,7 +115,7 @@ def mounted(share: str, mount_point: Path = MOUNT_POINT):
         return
     mount_point.mkdir(parents=True, exist_ok=True)
     result = subprocess.run(
-        ["mount_smbfs", "-N", share, str(mount_point)],
+        ["/sbin/mount_smbfs", "-N", share, str(mount_point)],
         capture_output=True, text=True, timeout=60,
     )
     if result.returncode != 0:
@@ -123,7 +123,7 @@ def mounted(share: str, mount_point: Path = MOUNT_POINT):
     try:
         yield mount_point
     finally:
-        subprocess.run(["umount", str(mount_point)], capture_output=True)
+        subprocess.run(["/sbin/umount", str(mount_point)], capture_output=True)
 
 
 class Command(BaseCommand):
