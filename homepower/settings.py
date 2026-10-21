@@ -55,6 +55,7 @@ TEMPLATES = [
         "OPTIONS": {
             "context_processors": [
                 "django.template.context_processors.request",
+                "catalog.grafana.context",
             ],
         },
     },
@@ -209,3 +210,12 @@ LOGGING = {
 
 # LOGGING's RotatingFileHandler opens lazily, but the directory must exist.
 LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+# Where Grafana lives, so catalog pages can deep-link into it from whatever
+# address the viewer used. Reached directly (the app's own port), Grafana is
+# on the same host at GRAFANA_PORT; reached through a front door that serves
+# both (Tailscale Serve/Funnel on :443), it is the path GRAFANA_PROXY_PATH on
+# the same origin. GRAFANA_SUBPATH is Grafana's own serve_from_sub_path prefix.
+GRAFANA_PORT = int(os.environ.get("GRAFANA_PORT", "3425"))
+GRAFANA_PROXY_PATH = "/grafana"
+GRAFANA_SUBPATH = os.environ.get("GRAFANA_SUBPATH", "")

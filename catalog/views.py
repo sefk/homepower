@@ -18,6 +18,7 @@ from billing import rates
 from billing.cycles import cycle_label, true_up_cycles
 from billing.models import BillPeriod, GasBillPeriod, UtilityRate
 from billing.rates import PEAK_END_HOUR, PEAK_START_HOUR, rate_for, rates_for
+from catalog import grafana
 from catalog.ev import sessions as ev_sessions
 from core import coverage
 from core.aggregate import energy_wh, grid_hourly_wh, has_grid_data
@@ -239,12 +240,28 @@ def home(request):
         else max(live["house"] - sum(v for v in metered if v is not None), 0)
     )
     grid = live["grid"]
+    grid_dir = None if grid is None or abs(grid) < HOME_IDLE_W else ("in" if grid > 0 else "out")
     ctx = {
         "section": "home",
+        # the Grafana dashboard that charts each node over time
+        "graf": {
+            "solaredge": grafana.url(request, "homepower-sources"),
+            "envoy": grafana.url(request, "homepower-sources"),
+            "grid": grafana.url(request, "homepower-live"),
+            "house": grafana.url(request, "homepower-sinks"),
+            "ev": grafana.url(request, "homepower-sinks", loads="Tesla"),
+            "hottub": grafana.url(request, "homepower-sinks", loads="Hot Tub (estimated)"),
+            "navien": grafana.url(request, "homepower-sinks", loads="Water Heater"),
+            "studio": grafana.url(request, "homepower-sinks", loads="Mac Studio"),
+            "closet": grafana.url(request, "homepower-sinks", loads="Network Closet"),
+            "unmetered": grafana.url(request, "homepower-sink-summary"),
+            "gas": grafana.url(request, "homepower-gas"),
+        },
         "show": {key: _fmt_watts(value) for key, value in live.items()},
         # which wires carry current right now (below the floor reads as idle)
         "on": {key: value is not None and abs(value) >= HOME_IDLE_W for key, value in live.items()},
-        "grid_dir": None if grid is None or abs(grid) < HOME_IDLE_W else ("in" if grid > 0 else "out"),
+        "grid_dir": grid_dir,
+        "grid_label": {"in": " importing", "out": " exporting", None: ""}[grid_dir] or (" idle" if grid is not None else ""),
     }
     return render(request, "catalog/home.html", ctx)
 

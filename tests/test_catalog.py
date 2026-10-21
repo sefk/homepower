@@ -224,3 +224,17 @@ class TestHome:
         content = client.get("/").content.decode()
         assert "2.50" in content  # 800 + 2200 - 500 = 2500 W house load
         assert "exporting" in content
+
+
+class TestGrafanaLinks:
+    def test_direct_access_links_to_grafana_port_on_same_host(self, db, client):
+        resp = client.get("/", HTTP_HOST="studio.local:8425")
+        content = resp.content.decode()
+        assert 'href="http://studio.local:3425/"' in content  # header
+        assert "http://studio.local:3425/d/homepower-sinks?var-loads=Tesla" in content
+
+    def test_front_door_links_to_path_on_same_origin(self, db, client):
+        resp = client.get("/", HTTP_HOST="studio.tail1234.ts.net")
+        content = resp.content.decode()
+        assert 'href="/grafana/"' in content
+        assert 'href="/grafana/d/homepower-sources"' in content

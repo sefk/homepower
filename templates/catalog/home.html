@@ -63,6 +63,10 @@
 .note { color: var(--ink-2); font-size: 0.85rem; margin: 0 0.5rem 0.5rem; }
 a.node { text-decoration: none; }
 a.node:hover .card-bg { stroke: var(--series-1); }
+a.gl rect { fill: var(--page); stroke: var(--border); }
+a.gl { color: var(--series-1); }
+a.gl:hover rect { fill: var(--series-1); stroke: var(--series-1); }
+a.gl:hover { color: #fff; }
 </style>
 {% endblock %}
 
@@ -70,121 +74,70 @@ a.node:hover .card-bg { stroke: var(--series-1); }
 <h1>635 Central · power at a glance</h1>
 
 <div class="card diagram">
-<svg viewBox="0 0 1100 640" role="img"
-     aria-label="Power flow diagram: two solar arrays and the PG&amp;E grid feed the main panel, which feeds the EV, hot tub, water heater, Mac Studio, network closet and unmetered loads.">
+<svg viewBox="0 0 1100 730" role="img"
+     aria-label="Power flow diagram: two solar arrays feed the main panel from above and the PG&amp;E grid from the left; the panel feeds the EV, hot tub, water heater, Mac Studio, network closet and unmetered loads.">
+  <defs>
+    <symbol id="gicon" viewBox="0 0 20 20">
+      <path d="M3 16V4M3 16h14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M6 12l3.2-3.6 2.8 2.2L17 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+  </defs>
 
-  <text class="t-zone" x="30" y="22">Supply</text>
-  <text class="t-zone" x="440" y="22">House</text>
-  <text class="t-zone" x="830" y="22">Loads</text>
+  <text class="t-zone" x="290" y="22">Solar</text>
+  <text class="t-zone" x="30" y="278">Utility</text>
+  <text class="t-zone" x="830" y="160">Loads</text>
 
-  <!-- wires: supply -> panel -->
-  <path class="wire" d="M260 86 C 350 86, 350 190, 440 190"/>
-  <path class="wire" d="M260 216 C 350 216, 350 245, 440 245"/>
-  <path class="wire" d="M260 386 C 350 386, 350 335, 440 335"/>
-  <path class="flow solar {% if on.solaredge %}run{% else %}idle{% endif %}" d="M260 86 C 350 86, 350 190, 440 190"/>
-  <path class="flow solar {% if on.envoy %}run{% else %}idle{% endif %}" d="M260 216 C 350 216, 350 245, 440 245"/>
-  {% if grid_dir == "in" %}
-  <path class="flow grid run" d="M260 386 C 350 386, 350 335, 440 335"/>
-  {% elif grid_dir == "out" %}
-  <path class="flow grid run rev" d="M260 386 C 350 386, 350 335, 440 335"/>
-  {% else %}
-  <path class="flow grid idle" d="M260 386 C 350 386, 350 335, 440 335"/>
-  {% endif %}
+  <!-- solar drops into the top of the panel -->
+  <path class="wire" d="M405 122 C 405 165, 490 150, 490 190"/>
+  <path class="flow solar {% if on.solaredge %}run{% else %}idle{% endif %}" d="M405 122 C 405 165, 490 150, 490 190"/>
+  <path class="wire" d="M695 122 C 695 165, 590 150, 590 190"/>
+  <path class="flow solar {% if on.envoy %}run{% else %}idle{% endif %}" d="M695 122 C 695 165, 590 150, 590 190"/>
 
-  <!-- wires: panel -> loads -->
-  <path class="wire" d="M640 150 C 735 150, 735 71, 830 71"/>
-  <path class="wire" d="M640 185 C 735 185, 735 166, 830 166"/>
-  <path class="wire" d="M640 220 C 735 220, 735 261, 830 261"/>
-  <path class="wire" d="M640 255 C 735 255, 735 356, 830 356"/>
-  <path class="wire" d="M640 290 C 735 290, 735 451, 830 451"/>
-  <path class="wire" d="M640 325 C 735 325, 735 546, 830 546"/>
-  <path class="flow load {% if on.ev %}run{% else %}idle{% endif %}" d="M640 150 C 735 150, 735 71, 830 71"/>
-  <path class="flow load {% if on.hottub %}run{% else %}idle{% endif %}" d="M640 185 C 735 185, 735 166, 830 166"/>
-  <path class="flow load {% if on.navien %}run{% else %}idle{% endif %}" d="M640 220 C 735 220, 735 261, 830 261"/>
-  <path class="flow load {% if on.studio %}run{% else %}idle{% endif %}" d="M640 255 C 735 255, 735 356, 830 356"/>
-  <path class="flow load {% if on.closet %}run{% else %}idle{% endif %}" d="M640 290 C 735 290, 735 451, 830 451"/>
-  <path class="flow load {% if on.unmetered %}run{% else %}idle{% endif %}" d="M640 325 C 735 325, 735 546, 830 546"/>
+  <!-- grid, from the left; the flow reverses when exporting -->
+  <path class="wire" d="M260 336 C 350 336, 350 335, 440 335"/>
+  <path class="flow grid {% if grid_dir == 'in' %}run{% elif grid_dir == 'out' %}run rev{% else %}idle{% endif %}" d="M260 336 C 350 336, 350 335, 440 335"/>
 
-  <!-- supply cards -->
-  <a class="node" href="{% url 'catalog:solar' %}">
-    <rect class="card-bg" x="30" y="40" width="230" height="92" rx="10"/>
-    <rect class="stripe cloud" x="30" y="40" width="6" height="92" rx="3"/>
-    <text class="t-name" x="52" y="64">Main house solar</text>
-    <text class="t-val {% if not show.solaredge.known %}unknown{% endif %}" x="52" y="96">{{ show.solaredge.text }}<tspan class="t-unit" dx="4">{{ show.solaredge.unit }}</tspan></text>
-    <text class="t-how" x="52" y="120">SolarEdge · cloud, every 15 min</text>
-    <circle class="dot {% if show.solaredge.known %}live{% endif %}" cx="242" cy="58" r="4"/>
-  </a>
-  <a class="node" href="{% url 'catalog:solar' %}">
-    <rect class="card-bg" x="30" y="170" width="230" height="92" rx="10"/>
-    <rect class="stripe direct" x="30" y="170" width="6" height="92" rx="3"/>
-    <text class="t-name" x="52" y="194">Guest house solar</text>
-    <text class="t-val {% if not show.envoy.known %}unknown{% endif %}" x="52" y="226">{{ show.envoy.text }}<tspan class="t-unit" dx="4">{{ show.envoy.unit }}</tspan></text>
-    <text class="t-how" x="52" y="250">Enphase Envoy · local, every minute</text>
-    <circle class="dot {% if show.envoy.known %}live{% endif %}" cx="242" cy="188" r="4"/>
-  </a>
-  <a class="node" href="{% url 'catalog:grid' %}">
-    <rect class="card-bg" x="30" y="340" width="230" height="92" rx="10"/>
-    <rect class="stripe direct" x="30" y="340" width="6" height="92" rx="3"/>
-    <text class="t-name" x="52" y="364">PG&amp;E grid</text>
-    <text class="t-val {% if not show.grid.known %}unknown{% endif %}" x="52" y="396">{{ show.grid.text }}<tspan class="t-unit" dx="4">{{ show.grid.unit }}{% if grid_dir == "in" %} importing{% elif grid_dir == "out" %} exporting{% elif show.grid.known %} idle{% endif %}</tspan></text>
-    <text class="t-how" x="52" y="420">Eagle 3 on the smart meter · ~15 s</text>
-    <circle class="dot {% if show.grid.known %}live{% endif %}" cx="242" cy="358" r="4"/>
-  </a>
-  <rect class="card-bg none" x="30" y="490" width="230" height="92" rx="10"/>
-  <rect class="stripe cloud" x="30" y="490" width="6" height="92" rx="3"/>
-  <text class="t-name" x="52" y="514">PG&amp;E gas</text>
-  <text class="t-sub" x="52" y="540">Heat and cooking — not on the panel</text>
-  <text class="t-how" x="52" y="564">Gas meter · pge.com, daily, 1–2 days behind</text>
+  <!-- panel -> loads -->
+  <path class="wire" d="M640 230 C 735 230, 735 210, 830 210"/>
+  <path class="flow load {% if on.ev %}run{% else %}idle{% endif %}" d="M640 230 C 735 230, 735 210, 830 210"/>
+  <path class="wire" d="M640 270 C 735 270, 735 298, 830 298"/>
+  <path class="flow load {% if on.hottub %}run{% else %}idle{% endif %}" d="M640 270 C 735 270, 735 298, 830 298"/>
+  <path class="wire" d="M640 310 C 735 310, 735 386, 830 386"/>
+  <path class="flow load {% if on.navien %}run{% else %}idle{% endif %}" d="M640 310 C 735 310, 735 386, 830 386"/>
+  <path class="wire" d="M640 350 C 735 350, 735 474, 830 474"/>
+  <path class="flow load {% if on.studio %}run{% else %}idle{% endif %}" d="M640 350 C 735 350, 735 474, 830 474"/>
+  <path class="wire" d="M640 390 C 735 390, 735 562, 830 562"/>
+  <path class="flow load {% if on.closet %}run{% else %}idle{% endif %}" d="M640 390 C 735 390, 735 562, 830 562"/>
+  <path class="wire" d="M640 430 C 735 430, 735 650, 830 650"/>
+  <path class="flow load {% if on.unmetered %}run{% else %}idle{% endif %}" d="M640 430 C 735 430, 735 650, 830 650"/>
 
   <!-- main panel -->
-  <rect class="card-bg panel" x="440" y="110" width="200" height="330" rx="14"/>
-  <text class="t-name" x="540" y="140" text-anchor="middle">Main panel</text>
-  <text class="t-sub" x="540" y="158" text-anchor="middle">200 A service</text>
-  <text class="t-sub" x="470" y="200">solar in</text>
-  <text class="t-sub" x="610" y="200" text-anchor="end" style="font-variant-numeric: tabular-nums; fill: var(--ink)">{{ show.solar.text }} {{ show.solar.unit }}</text>
-  <text class="t-sub" x="470" y="240">grid</text>
-  <text class="t-sub" x="610" y="240" text-anchor="end" style="font-variant-numeric: tabular-nums; fill: var(--ink)">{{ show.grid.text }} {{ show.grid.unit }}</text>
-  <line x1="470" y1="372" x2="610" y2="372" stroke="var(--grid)"/>
-  <text class="t-sub" x="540" y="394" text-anchor="middle">house load now</text>
-  <text class="t-val {% if not show.house.known %}unknown{% endif %}" x="540" y="424" text-anchor="middle">{{ show.house.text }}<tspan class="t-unit" dx="4">{{ show.house.unit }}</tspan></text>
+  <rect class="card-bg panel" x="440" y="190" width="200" height="330" rx="14"/>
+  <text class="t-name" x="540" y="222" text-anchor="middle">Main panel</text>
+  <text class="t-sub" x="540" y="240" text-anchor="middle">200 A service</text>
+  <text class="t-sub" x="470" y="284">solar in</text>
+  <text class="t-sub" x="610" y="284" text-anchor="end" style="font-variant-numeric: tabular-nums; fill: var(--ink)">{{ show.solar.text }} {{ show.solar.unit }}</text>
+  <text class="t-sub" x="470" y="320">grid</text>
+  <text class="t-sub" x="610" y="320" text-anchor="end" style="font-variant-numeric: tabular-nums; fill: var(--ink)">{{ show.grid.text }} {{ show.grid.unit }}</text>
+  <line x1="470" y1="446" x2="610" y2="446" stroke="var(--grid)"/>
+  <text class="t-sub" x="540" y="468" text-anchor="middle">house load now</text>
+  <text class="t-val {% if not show.house.known %}unknown{% endif %}" x="540" y="504" text-anchor="middle">{{ show.house.text }}<tspan class="t-unit" dx="4">{{ show.house.unit }}</tspan></text>
+  <a class="gl" href="{{ graf.house }}"><title>Open in Grafana</title><rect x="610" y="198" width="22" height="22" rx="6"/><use href="#gicon" x="612" y="200" width="18" height="18"/></a>
 
-  <!-- load cards -->
-  <a class="node" href="{% url 'catalog:ev' %}">
-    <rect class="card-bg" x="830" y="30" width="240" height="82" rx="10"/>
-    <rect class="stripe cloud" x="830" y="30" width="6" height="82" rx="3"/>
-    <text class="t-name" x="850" y="54">Tesla Model S</text>
-    <text class="t-val {% if not show.ev.known %}unknown{% endif %}" x="850" y="84">{{ show.ev.text }}<tspan class="t-unit" dx="4">{{ show.ev.unit }}</tspan></text>
-    <text class="t-how" x="850" y="103">Tesla Fleet API · charging power</text>
-  </a>
-  <rect class="card-bg est" x="830" y="125" width="240" height="82" rx="10"/>
-  <rect class="stripe est" x="830" y="125" width="6" height="82" rx="3"/>
-  <text class="t-name" x="850" y="149">Hot tub</text>
-  <text class="t-val {% if not show.hottub.known %}unknown{% endif %}" x="850" y="179">{{ show.hottub.text }}<tspan class="t-unit" dx="4">{{ show.hottub.unit }}</tspan></text>
-  <text class="t-how" x="850" y="198">Estimated from meter step changes</text>
+  {% url 'catalog:solar' as solar_url %}
+  {% include "catalog/_node.html" with x=290 y=30 w=230 h=92 name="Main house solar" val=show.solaredge kind="cloud" how="SolarEdge · cloud, every 15 min" href=solar_url graf=graf.solaredge dot=1 %}
+  {% include "catalog/_node.html" with x=580 y=30 w=230 h=92 name="Guest house solar" val=show.envoy kind="direct" how="Enphase Envoy · local, every minute" href=solar_url graf=graf.envoy dot=1 %}
+  {% url 'catalog:grid' as grid_url %}
+  {% include "catalog/_node.html" with x=30 y=290 w=230 h=92 name="PG&E grid" val=show.grid kind="direct" how="Eagle 3 on the smart meter · ~15 s" href=grid_url graf=graf.grid dot=1 unit_extra=grid_label %}
+  {% include "catalog/_node.html" with x=30 y=560 w=230 h=92 name="PG&E gas" sub="Heat and cooking · off the panel" kind="none" how="Gas meter · pge.com, daily, 1–2 days behind" graf=graf.gas %}
 
-  <rect class="card-bg" x="830" y="220" width="240" height="82" rx="10"/>
-  <rect class="stripe cloud" x="830" y="220" width="6" height="82" rx="3"/>
-  <text class="t-name" x="850" y="244">Heat pump water heater</text>
-  <text class="t-val {% if not show.navien.known %}unknown{% endif %}" x="850" y="274">{{ show.navien.text }}<tspan class="t-unit" dx="4">{{ show.navien.unit }}</tspan></text>
-  <text class="t-how" x="850" y="293">NaviLink · cloud, every minute</text>
-
-  <rect class="card-bg" x="830" y="315" width="240" height="82" rx="10"/>
-  <rect class="stripe direct" x="830" y="315" width="6" height="82" rx="3"/>
-  <text class="t-name" x="850" y="339">Mac Studio</text>
-  <text class="t-val {% if not show.studio.known %}unknown{% endif %}" x="850" y="369">{{ show.studio.text }}<tspan class="t-unit" dx="4">{{ show.studio.unit }}</tspan></text>
-  <text class="t-how" x="850" y="388">macmon on the host · every minute</text>
-
-  <rect class="card-bg" x="830" y="410" width="240" height="82" rx="10"/>
-  <rect class="stripe direct" x="830" y="410" width="6" height="82" rx="3"/>
-  <text class="t-name" x="850" y="434">Network closet</text>
-  <text class="t-val {% if not show.closet.known %}unknown{% endif %}" x="850" y="464">{{ show.closet.text }}<tspan class="t-unit" dx="4">{{ show.closet.unit }}</tspan></text>
-  <text class="t-how" x="850" y="483">UPS load % via NUT (Synology)</text>
-
-  <rect class="card-bg none" x="830" y="505" width="240" height="82" rx="10"/>
-  <rect class="stripe none" x="830" y="505" width="6" height="82" rx="3"/>
-  <text class="t-name" x="850" y="529">Everything else</text>
-  <text class="t-val {% if not show.unmetered.known %}unknown{% endif %}" x="850" y="559">{{ show.unmetered.text }}<tspan class="t-unit" dx="4">{{ show.unmetered.unit }}</tspan></text>
-  <text class="t-how" x="850" y="578">House load minus the above</text>
+  {% url 'catalog:ev' as ev_url %}
+  {% include "catalog/_node.html" with x=830 y=170 w=240 h=80 name="Tesla Model S" val=show.ev kind="cloud" how="Tesla Fleet API · charging power" href=ev_url graf=graf.ev %}
+  {% include "catalog/_node.html" with x=830 y=258 w=240 h=80 name="Hot tub" val=show.hottub kind="est" how="Estimated from meter step changes" graf=graf.hottub %}
+  {% include "catalog/_node.html" with x=830 y=346 w=240 h=80 name="Heat pump water heater" val=show.navien kind="cloud" how="NaviLink · cloud, every minute" graf=graf.navien %}
+  {% include "catalog/_node.html" with x=830 y=434 w=240 h=80 name="Mac Studio" val=show.studio kind="direct" how="macmon on the host · every minute" graf=graf.studio %}
+  {% include "catalog/_node.html" with x=830 y=522 w=240 h=80 name="Network closet" val=show.closet kind="direct" how="UPS load % via NUT (Synology)" graf=graf.closet %}
+  {% include "catalog/_node.html" with x=830 y=610 w=240 h=80 name="Everything else" val=show.unmetered kind="none" how="House load minus the above" graf=graf.unmetered %}
 </svg>
 
 <div class="legend">
@@ -193,6 +146,6 @@ a.node:hover .card-bg { stroke: var(--series-1); }
   <span><i class="est"></i>estimated from other meters</span>
   <span><i class="none"></i>not metered — a remainder</span>
 </div>
-<p class="note">House load is solar plus grid, so it is only shown when all three are fresh. A dash means no current reading, never zero. Moving dots show current flowing; the PG&amp;E wire reverses when the house is exporting.</p>
+<p class="note">House load is solar plus grid, so it is only shown when all three are fresh. A dash means no current reading, never zero. The graph icons open the matching Grafana dashboard. Moving dots show current flowing; the PG&amp;E wire reverses when the house is exporting.</p>
 </div>
 {% endblock %}
