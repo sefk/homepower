@@ -139,7 +139,7 @@ a.gl:hover { color: #fff; }
   {% include "catalog/_node.html" with x=830 y=346 w=240 h=80 name="Heat pump water heater" val=show.navien kind="cloud" how="NaviLink · cloud, every minute" graf=graf.navien %}
   {% include "catalog/_node.html" with x=830 y=434 w=240 h=80 name="Mac Studio" val=show.studio kind="direct" how="macmon on the host · every minute" graf=graf.studio %}
   {% include "catalog/_node.html" with x=830 y=522 w=240 h=80 name="Network closet" val=show.closet kind="direct" how="UPS load % via NUT (Synology)" graf=graf.closet %}
-  {% include "catalog/_node.html" with x=830 y=610 w=240 h=80 name="Everything else" val=show.unmetered kind="none" how="House load minus the above" graf=graf.unmetered %}
+  {% include "catalog/_node.html" with x=830 y=610 w=240 h=80 name="Everything else" val=show.unmetered kind="none" how=unmetered_how graf=graf.unmetered %}
 </svg>
 
 <div class="legend">
@@ -152,7 +152,7 @@ a.gl:hover { color: #fff; }
   <li>The large number is now. A dash means no current reading, never zero.</li>
   <li>The small number after the slash is the average for this hour of the day over the previous 30 days, in the same unit, taken over the time actually seen. A dash means less than 40% of those hours were seen: SolarEdge records nothing at night, for one.</li>
   <li>Gas arrives as whole days, a day or two late, so its large number is the latest posted day's average against its 30-day average. 1 therm is 29.3 kWh of heat, about 1.2 kW for a therm a day. It is heat, not electricity, and isn't part of the house load.</li>
-  <li>House load is solar plus grid, so it is only shown when all three are fresh. Its average, and those of solar in and everything else, show only when every input was seen for 90% of those hours, because averages only add up over the same time.</li>
+  <li>House load is solar plus grid, so it is only shown when all three are fresh. The averages for house load and solar in show only when every input was seen for 90% of those hours, because averages only add up over the same time. Everything else is averaged day by day over the days its inputs were all seen (at least 3), and says how many days when that is fewer than 30.</li>
   <li>The graph icons open the matching Grafana dashboard. Moving dots show current flowing; the PG&amp;E wire reverses when the house is exporting.</li>
 </ul>
 </div>

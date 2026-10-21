@@ -205,6 +205,9 @@ HOME_IDLE_W = 10  # below this a wire is drawn idle rather than flowing
 HOME_AVG_DAYS = 30
 HOME_AVG_MIN_COVERAGE = 0.4
 HOME_AVG_FULL_COVERAGE = 0.9
+# "Everything else" is averaged over the days every input was seen, however
+# few, as long as there are at least this many.
+HOME_UNMETERED_MIN_DAYS = 3
 # A sample starting before an hour can still overlap it. Only the slow
 # collectors write samples this long (Tesla charging 5 min, SolarEdge 15,
 # Tesla idle 30), so look back an hour for those alone.
@@ -247,35 +250,62 @@ def _hour_windows(now, days=HOME_AVG_DAYS):
     return windows
 
 
-def _avg_watts(slug, metric, now):
-    """(mean power, seen fraction) for this hour of the day over the previous
-    HOME_AVG_DAYS days.
+def _hour_stats(slug, metric, now):
+    """Per previous day, this local hour's (watt-seconds, seconds seen).
 
-    The mean is time-weighted over the samples that exist, clipped to each
-    hour, so unseen time is left out rather than counted as zero; the seen
-    fraction is that time over all the hours. None when under
-    HOME_AVG_MIN_COVERAGE was seen, so an outage never reads as a quiet day
-    (and a source that records nothing at this hour, like SolarEdge at night,
-    has no average rather than a zero one)."""
-    windows = _hour_windows(now)
+    Time-weighted over the samples that exist, clipped to the hour, so
+    unseen time is left out rather than counted as zero."""
     series = Sample.objects.filter(series__source__slug=slug, series__metric=metric)
-    watt_seconds = seconds = 0.0
+    stats = []
     # One small indexed query per hour: a single OR across all thirty is
     # ~100x slower (SQLite scans instead of seeking).
-    for start, end in windows:
+    for start, end in _hour_windows(now):
         rows = series.filter(
             Q(ts__gte=start, ts__lt=end)
             | Q(ts__gte=start - HOME_LOOKBACK, ts__lt=start, duration_s__gte=HOME_LONG_SAMPLE_S)
         ).values_list("ts", "duration_s", "value")
+        watt_seconds = seconds = 0.0
         for ts, duration_s, value in rows:
             overlap = (min(end, ts + timedelta(seconds=duration_s)) - max(start, ts)).total_seconds()
             if overlap > 0:
                 watt_seconds += value * overlap
                 seconds += overlap
-    seen = seconds / (len(windows) * 3600)
+        stats.append((watt_seconds, seconds))
+    return stats
+
+
+def _avg_watts(stats):
+    """(mean power, seen fraction) over all the hours in `stats`.
+
+    None when under HOME_AVG_MIN_COVERAGE was seen, so an outage never reads
+    as a quiet day (and a source that records nothing at this hour, like
+    SolarEdge at night, has no average rather than a zero one)."""
+    seconds = sum(sec for _, sec in stats)
+    seen = seconds / (len(stats) * 3600)
     if seen < HOME_AVG_MIN_COVERAGE:
         return None, seen
-    return watt_seconds / seconds, seen
+    return sum(ws for ws, _ in stats) / seconds, seen
+
+
+def _unmetered_avg(stats):
+    """(mean "everything else" power, days) over the days on which every
+    input was seen for this hour.
+
+    Each day's house load minus its metered loads is computed from that
+    day's own means, then those are averaged, so a load that only started
+    recording last week narrows the window instead of blocking the number.
+    None when fewer than HOME_UNMETERED_MIN_DAYS days qualify."""
+    inputs = ("solaredge", "envoy", "grid", "ev", "hottub", "navien", "studio", "closet")
+    values = []
+    for day in zip(*(stats[k] for k in inputs)):
+        if any(sec < HOME_AVG_FULL_COVERAGE * 3600 for _, sec in day):
+            continue
+        mean = dict(zip(inputs, (ws / sec for ws, sec in day)))
+        house = mean["solaredge"] + mean["envoy"] + mean["grid"]
+        values.append(max(house - sum(mean[k] for k in inputs[3:]), 0))
+    if len(values) < HOME_UNMETERED_MIN_DAYS:
+        return None, len(values)
+    return sum(values) / len(values), len(values)
 
 
 def _with_derived(vals, strict=False):
@@ -340,7 +370,9 @@ def home(request):
     which meter sees each piece, with the latest reading where one is fresh."""
     now = timezone.now()
     live = _with_derived({k: _live_watts(slug, m, now) for k, (slug, m) in HOME_LIVE.items()})
-    avgs = {k: _avg_watts(slug, m, now) for k, (slug, m) in HOME_LIVE.items()}
+    stats = {k: _hour_stats(slug, m, now) for k, (slug, m) in HOME_LIVE.items()}
+    avgs = {k: _avg_watts(st) for k, st in stats.items()}
+    unmetered_prior, unmetered_days = _unmetered_avg(stats)
     short = {k: cov < HOME_AVG_FULL_COVERAGE for k, (_, cov) in avgs.items()}
     # Derived averages only from inputs seen for (nearly) the whole window:
     # sums and differences of means over different stretches of time are
@@ -352,8 +384,9 @@ def home(request):
         for k, v in _with_derived(
             {k: None if short[k] else avg for k, (avg, _) in avgs.items()}, strict=True
         ).items()
-        if k in ("solar", "house", "unmetered")
+        if k in ("solar", "house")
     }
+    prior["unmetered"] = unmetered_prior
     gas = _gas_daily(now)
     grid = live["grid"]
     grid_dir = None if grid is None or abs(grid) < HOME_IDLE_W else ("in" if grid > 0 else "out")
@@ -375,6 +408,11 @@ def home(request):
         },
         "show": {key: _fmt_watts(value, prior[key]) for key, value in live.items()}
         | {"gas": _fmt_watts(*gas[1:]) if gas else _fmt_watts(None)},
+        "unmetered_how": (
+            f"House load minus above · {unmetered_days}-day avg"
+            if unmetered_prior is not None and unmetered_days < HOME_AVG_DAYS
+            else "House load minus the above"
+        ),
         "gas_how": f"{gas[0]:%b} {gas[0].day} average · pge.com, daily" if gas else "pge.com · no recent reading",
         # which wires carry current right now (below the floor reads as idle)
         "on": {key: value is not None and abs(value) >= HOME_IDLE_W for key, value in live.items()},

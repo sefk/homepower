@@ -281,6 +281,40 @@ class TestHomeHourOfDayAverage:
         assert "/ 0.50" in client.get("/").content.decode()
 
 
+class TestHomeUnmetered:
+    LEVELS = {  # slug -> watts for each hour seen
+        "solaredge": 1000, "envoy": 500, "eagle": 1000,  # house load 2,500 W
+        "tesla": 100, "hottub_est": 200, "navien": 300, "studio": 400, "closet": 500,
+    }
+
+    def _seed(self, days):
+        from catalog.views import _hour_windows
+
+        windows = _hour_windows(timezone.now())[30 - days:]
+        for slug, watts in self.LEVELS.items():
+            source = Source.objects.create(
+                slug=slug, name=slug, kind=Source.Kind.DEVICE,
+                poll_interval_s=60, native_resolution_s=60,
+            )
+            metric = {"eagle": "demand_w", "tesla": "ev_charge_power_w"}.get(
+                slug, "production_w" if slug in ("solaredge", "envoy") else "power_w"
+            )
+            s = Series.objects.create(source=source, metric=metric, unit="W")
+            for start, _ in windows:
+                Sample.objects.create(series=s, ts=start, duration_s=3600, value=float(watts))
+
+    def test_averaged_over_the_days_every_input_was_seen(self, db, client):
+        self._seed(days=5)  # all eight started only five days ago
+        content = client.get("/").content.decode()
+        assert "/ 1.00" in content  # 2,500 W house - 1,500 W metered
+        assert "5-day avg" in content
+
+    def test_too_few_overlapping_days_is_a_dash(self, db, client):
+        self._seed(days=2)
+        content = client.get("/").content.decode()
+        assert "day avg" not in content
+
+
 class TestHomeGas:
     def test_latest_day_as_thermal_watts_against_the_30_day_mean(self, db, client):
         now = timezone.now()
