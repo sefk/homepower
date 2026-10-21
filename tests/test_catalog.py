@@ -240,41 +240,45 @@ class TestGrafanaLinks:
         assert 'href="/grafana/d/homepower-sources"' in content
 
 
-class TestHomeTrailingAverage:
-    def _grid(self, now, covered=True):
+class TestHomeHourOfDayAverage:
+    def _grid(self, now, days=20, hours_seen=1):
+        """The Eagle, with a 500 W sample for this hour on `days` of the past
+        30 days (and a 1500 W reading just now)."""
+        from catalog.views import _hour_windows
+
         source = Source.objects.create(
             slug="eagle", name="PG&E Grid", kind=Source.Kind.GRID,
             poll_interval_s=15, native_resolution_s=15,
         )
         s = Series.objects.create(source=source, metric="demand_w", unit="W")
         Sample.objects.create(series=s, ts=now - timedelta(seconds=5), duration_s=15, value=1500.0)
-        if covered:
-            Sample.objects.create(
-                series=s, ts=now - timedelta(days=30) + timedelta(seconds=10),
-                duration_s=30 * 86400 - 60, value=500.0,
-            )
+        for start, _ in _hour_windows(now)[30 - days:]:
+            Sample.objects.create(series=s, ts=start, duration_s=3600, value=500.0)
         return s
 
-    def test_prior_shares_the_readings_unit(self, db, client):
+    def test_average_shares_the_readings_unit(self, db, client):
         self._grid(timezone.now())
         content = client.get("/").content.decode()
         assert "1.50" in content  # 1500 W now, shown in kW...
         assert "/ 0.50" in content  # ...so the 500 W average is too
+        assert "~" not in content.split("<ul")[0].split("<svg")[1]
 
-    def test_thin_coverage_gives_a_dash_not_an_average(self, db, client):
-        self._grid(timezone.now(), covered=False)
+    def test_too_few_hours_seen_is_a_dash(self, db, client):
+        self._grid(timezone.now(), days=5)  # 5 of 30 hours
         content = client.get("/").content.decode()
         assert "/ —" in content
 
-    def test_half_covered_average_shows_approximate(self, db, client):
+    def test_a_sample_spanning_the_hour_counts_only_the_hour(self, db, client):
+        """A long idle sample that began before the hour is clipped to it."""
+        from catalog.views import _hour_windows
+
         now = timezone.now()
-        s = self._grid(now, covered=False)
-        Sample.objects.create(
-            series=s, ts=now - timedelta(days=30) + timedelta(seconds=10),
-            duration_s=15 * 86400, value=500.0,
-        )
-        content = client.get("/").content.decode()
-        assert "/ ~0.50" in content
+        s = self._grid(now, days=0)
+        for start, _ in _hour_windows(now):
+            Sample.objects.create(
+                series=s, ts=start - timedelta(minutes=40), duration_s=7200, value=500.0
+            )
+        assert "/ 0.50" in client.get("/").content.decode()
 
 
 class TestHomeGas:

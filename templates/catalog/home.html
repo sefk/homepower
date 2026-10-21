@@ -61,7 +61,8 @@
 .legend i.cloud { background: var(--m-cloud); }
 .legend i.est { background: var(--m-est); }
 .legend i.none { background: var(--m-none); }
-.note { color: var(--ink-2); font-size: 0.85rem; margin: 0 0.5rem 0.5rem; }
+.note { color: var(--ink-2); font-size: 0.85rem; margin: 0.25rem 0.5rem 0.5rem; padding-left: 1.25rem; }
+.note li { margin-bottom: 0.25rem; }
 a.node { text-decoration: none; }
 a.node:hover .card-bg { stroke: var(--series-1); }
 a.gl rect { fill: var(--page); stroke: var(--border); }
@@ -147,6 +148,12 @@ a.gl:hover { color: #fff; }
   <span><i class="est"></i>estimated from other meters</span>
   <span><i class="none"></i>not metered — a remainder</span>
 </div>
-<p class="note">House load is solar plus grid, so it is only shown when all three are fresh. A dash means no current reading, never zero. The large number is now; the small one after the slash is the average over the past 30 days, in the same unit, taken over the time actually seen. A ~ means less than 90% of the 30 days was seen (solar is only recorded by day, so its average is a daytime one); a dash means less than 40%, or, for the panel's solar, house load and everything else, that any input was seen for less than 90% (those are sums of averages, which only add up over the same time). Gas arrives as whole days, a day or two late, so its large number is the latest posted day's average (1 therm = 29.3 kWh of heat, so about 1.2 kW for a therm a day) against its 30-day average; it is heat, not electricity, and isn't part of the house load. The graph icons open the matching Grafana dashboard. Moving dots show current flowing; the PG&amp;E wire reverses when the house is exporting.</p>
+<ul class="note">
+  <li>The large number is now. A dash means no current reading, never zero.</li>
+  <li>The small number after the slash is the average for this hour of the day over the previous 30 days, in the same unit, taken over the time actually seen. A dash means less than 40% of those hours were seen: SolarEdge records nothing at night, for one.</li>
+  <li>Gas arrives as whole days, a day or two late, so its large number is the latest posted day's average against its 30-day average. 1 therm is 29.3 kWh of heat, about 1.2 kW for a therm a day. It is heat, not electricity, and isn't part of the house load.</li>
+  <li>House load is solar plus grid, so it is only shown when all three are fresh. Its average, and those of solar in and everything else, show only when every input was seen for 90% of those hours, because averages only add up over the same time.</li>
+  <li>The graph icons open the matching Grafana dashboard. Moving dots show current flowing; the PG&amp;E wire reverses when the house is exporting.</li>
+</ul>
 </div>
 {% endblock %}
