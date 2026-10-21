@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Deploy the working tree to the live studio services: test, migrate,
+# restart the app, and wait until it answers. Run from anywhere.
+#
+#   bin/deploy              tests, migrate, restart the app
+#   bin/deploy --grafana    also restart Grafana (new plugins, grafana.ini)
+#   bin/deploy --no-test    skip the test suite
+#
+# The services are system LaunchDaemons (they run as sefk but start at boot,
+# before any login), so restarting them needs sudo; you'll be prompted.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+APP=com.sefk.homepower
+GRAFANA=com.sefk.grafana
+PORT="${HOMEPOWER_PORT:-8425}"
+
+run_tests=1
+restart_grafana=0
+for arg in "$@"; do
+  case "$arg" in
+    --no-test) run_tests=0 ;;
+    --grafana) restart_grafana=1 ;;
+    -h|--help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "unknown option: $arg" >&2; exit 2 ;;
+  esac
+done
+
+if [[ -n "$(git status --porcelain)" ]]; then
+  echo "warning: uncommitted changes; deploying the working tree as it is" >&2
+fi
+
+if (( run_tests )); then
+  echo "==> tests"
+  uv run pytest -q
+fi
+
+echo "==> migrate"
+uv run python manage.py migrate --noinput
+
+restart() {
+  echo "==> restart $1"
+  sudo launchctl kickstart -k "system/$1"
+}
+
+restart "$APP"
+(( restart_grafana )) && restart "$GRAFANA"
+
+echo "==> waiting for :$PORT"
+for _ in $(seq 1 30); do
+  if curl -fs -o /dev/null "http://localhost:$PORT/"; then
+    echo "up: $(git log --oneline -1)"
+    exit 0
+  fi
+  sleep 1
+done
+echo "app did not answer on :$PORT within 30s; see var/log/homepower.log" >&2
+exit 1

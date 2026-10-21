@@ -2,26 +2,29 @@
 
 ## launchd install (studio)
 
-The service is a per-user LaunchAgent — it runs as `sefk`, starts at boot,
-and needs no GUI login.
+The services on studio run as system LaunchDaemons in
+`/Library/LaunchDaemons/` (user `sefk`, started at boot, no GUI login
+needed). The plists in `ops/` are the same minus the `UserName`/`GroupName`
+and `HOME` keys that the daemon copies add. Restarting one needs `sudo`.
+
+Deploy the working tree (tests, migrate, restart, wait until it answers):
 
 ```sh
-cp ops/com.sefk.homepower.plist ~/Library/LaunchAgents/
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.sefk.homepower.plist
+bin/deploy              # add --grafana to restart Grafana too, --no-test to skip pytest
 ```
 
 Check it:
 
 ```sh
-launchctl print gui/$(id -u)/com.sefk.homepower | head -20
+sudo launchctl print system/com.sefk.homepower | head -20
 curl -s http://localhost:8425/
 ```
 
-Stop / restart:
+Stop / restart by hand:
 
 ```sh
-launchctl kickstart -k gui/$(id -u)/com.sefk.homepower   # restart
-launchctl bootout gui/$(id -u)/com.sefk.homepower        # stop + unload
+sudo launchctl kickstart -k system/com.sefk.homepower   # restart
+sudo launchctl bootout system/com.sefk.homepower        # stop + unload
 ```
 
 ## Logs
