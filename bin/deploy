@@ -2,8 +2,9 @@
 # Deploy the working tree to the live studio services: test, migrate,
 # restart the app, and wait until it answers. Run from anywhere.
 #
-#   bin/deploy              tests, migrate, restart the app
-#   bin/deploy --grafana    also restart Grafana (new plugins, grafana.ini)
+#   bin/deploy              tests, migrate, restart the app and Grafana
+#   bin/deploy --no-grafana leave Grafana running (it re-reads dashboards
+#                           itself; only grafana.ini and plugins need a restart)
 #   bin/deploy --no-test    skip the test suite
 #
 # The services are system LaunchDaemons (they run as sefk but start at boot,
@@ -17,12 +18,12 @@ GRAFANA=com.sefk.grafana
 PORT="${HOMEPOWER_PORT:-8425}"
 
 run_tests=1
-restart_grafana=0
+restart_grafana=1
 for arg in "$@"; do
   case "$arg" in
     --no-test) run_tests=0 ;;
-    --grafana) restart_grafana=1 ;;
-    -h|--help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --no-grafana) restart_grafana=0 ;;
+    -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done

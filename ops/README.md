@@ -10,7 +10,7 @@ and `HOME` keys that the daemon copies add. Restarting one needs `sudo`.
 Deploy the working tree (tests, migrate, restart, wait until it answers):
 
 ```sh
-bin/deploy              # add --grafana to restart Grafana too, --no-test to skip pytest
+bin/deploy              # restarts the app and Grafana; --no-grafana, --no-test to skip
 ```
 
 Check it:
