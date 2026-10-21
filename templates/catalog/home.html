@@ -147,6 +147,6 @@ a.gl:hover { color: #fff; }
   <span><i class="est"></i>estimated from other meters</span>
   <span><i class="none"></i>not metered — a remainder</span>
 </div>
-<p class="note">House load is solar plus grid, so it is only shown when all three are fresh. A dash means no current reading, never zero. The large number is now; the small one after the slash is the average over the previous 24 hours, in the same unit, taken over the time actually seen (a dash if less than 90% of it was). The graph icons open the matching Grafana dashboard. Moving dots show current flowing; the PG&amp;E wire reverses when the house is exporting.</p>
+<p class="note">House load is solar plus grid, so it is only shown when all three are fresh. A dash means no current reading, never zero. The large number is now; the small one after the slash is the average over the previous 24 hours, in the same unit, taken over the time actually seen. A ~ means less than 90% of the day was seen (solar is only recorded by day, so its average is a daytime one); a dash means less than 40%. The graph icons open the matching Grafana dashboard. Moving dots show current flowing; the PG&amp;E wire reverses when the house is exporting.</p>
 </div>
 {% endblock %}

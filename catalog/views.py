@@ -195,10 +195,14 @@ HOME_LIVE = {
 HOME_IDLE_W = 10  # below this a wire is drawn idle rather than flowing
 
 
-HOME_AVG_MIN_COVERAGE = 0.9  # of the prior 24 h; below it the average is unknown
+# Share of the prior 24 h that must have been seen for an average to show at
+# all, and the share below which it shows as approximate ("~"). Solar is only
+# recorded by day, so a full 24 h is not a thing to demand of it.
+HOME_AVG_MIN_COVERAGE = 0.4
+HOME_AVG_FULL_COVERAGE = 0.9
 
 
-def _fmt_watts(value, prior=None):
+def _fmt_watts(value, prior=None, partial=False):
     """Display parts for a power reading and the prior-24h average, in one
     unit chosen from the reading (the average's from itself when there's no
     reading). Unknown values come back as dashes."""
@@ -216,23 +220,24 @@ def _fmt_watts(value, prior=None):
         "text": part(value) or "—",
         "unit": "" if ref is None else ("kW" if kilo else "W"),
         "known": value is not None,
-        "prior": part(prior, signed=True) or "—",
+        "prior": ("~" if partial and prior is not None else "") + (part(prior, signed=True) or "—"),
     }
 
 
 def _avg_watts(slug, metric, now):
-    """Mean power over the 24 h before `now`, over the time actually seen.
+    """(mean power, covered fraction) over the 24 h before `now`, the mean
+    taken over the time actually seen.
 
-    Unknown (None) when under HOME_AVG_MIN_COVERAGE of the window is
+    The mean is None when under HOME_AVG_MIN_COVERAGE of the window is
     covered, so an outage never reads as a quiet day."""
     series = Series.objects.filter(source__slug=slug, metric=metric).first()
     if series is None:
-        return None
+        return None, 0.0
     start = now - timedelta(hours=24)
     window = energy_wh(series, start, now)
     if window.coverage < HOME_AVG_MIN_COVERAGE:
-        return None
-    return window.wh / (24 * window.coverage)
+        return None, window.coverage
+    return window.wh / (24 * window.coverage), window.coverage
 
 
 def _with_derived(vals):
@@ -276,7 +281,16 @@ def home(request):
     which meter sees each piece, with the latest reading where one is fresh."""
     now = timezone.now()
     live = _with_derived({k: _live_watts(slug, m, now) for k, (slug, m) in HOME_LIVE.items()})
-    prior = _with_derived({k: _avg_watts(slug, m, now) for k, (slug, m) in HOME_LIVE.items()})
+    avgs = {k: _avg_watts(slug, m, now) for k, (slug, m) in HOME_LIVE.items()}
+    prior = _with_derived({k: avg for k, (avg, _) in avgs.items()})
+    # A derived average is approximate if any input was seen for less than a
+    # full day: the inputs' observed windows then differ.
+    partial = {k: cov < HOME_AVG_FULL_COVERAGE for k, (_, cov) in avgs.items()}
+    partial["solar"] = partial["solaredge"] or partial["envoy"]
+    partial["house"] = partial["solar"] or partial["grid"]
+    partial["unmetered"] = partial["house"] or any(
+        partial[k] for k in ("ev", "hottub", "navien", "studio", "closet")
+    )
     grid = live["grid"]
     grid_dir = None if grid is None or abs(grid) < HOME_IDLE_W else ("in" if grid > 0 else "out")
     ctx = {
@@ -295,7 +309,7 @@ def home(request):
             "unmetered": grafana.url(request, "homepower-sink-summary"),
             "gas": grafana.url(request, "homepower-gas"),
         },
-        "show": {key: _fmt_watts(value, prior[key]) for key, value in live.items()},
+        "show": {key: _fmt_watts(value, prior[key], partial[key]) for key, value in live.items()},
         # which wires carry current right now (below the floor reads as idle)
         "on": {key: value is not None and abs(value) >= HOME_IDLE_W for key, value in live.items()},
         "grid_dir": grid_dir,

@@ -264,6 +264,14 @@ class TestHomePrior24h:
         content = client.get("/").content.decode()
         assert "/ —" in content
 
+    def test_half_covered_average_shows_approximate(self, db, client):
+        now = timezone.now()
+        s = self._grid(now, covered=False)
+        Sample.objects.create(series=s, ts=now - timedelta(hours=24), duration_s=43200, value=500.0)
+        record_coverage(s, now - timedelta(hours=24), now - timedelta(hours=12), CoverageSpan.State.LIVE)
+        content = client.get("/").content.decode()
+        assert "/ ~0.50" in content
+
 
 def test_grafana_links_open_in_a_new_tab(db, client):
     import re
