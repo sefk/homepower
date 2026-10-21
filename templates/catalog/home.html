@@ -116,10 +116,10 @@ a.gl:hover { color: #fff; }
   <rect class="card-bg panel" x="440" y="190" width="200" height="330" rx="14"/>
   <text class="t-name" x="540" y="222" text-anchor="middle">Main panel</text>
   <text class="t-sub" x="540" y="240" text-anchor="middle">200 A service</text>
-  <text class="t-sub" x="470" y="284">solar in</text>
-  <text class="t-sub" x="610" y="284" text-anchor="end" style="font-variant-numeric: tabular-nums; fill: var(--ink)">{{ show.solar.text }} {{ show.solar.unit }}<tspan class="t-prior" dx="5">/ {{ show.solar.prior }}</tspan></text>
-  <text class="t-sub" x="470" y="320">grid</text>
-  <text class="t-sub" x="610" y="320" text-anchor="end" style="font-variant-numeric: tabular-nums; fill: var(--ink)">{{ show.grid.text }} {{ show.grid.unit }}<tspan class="t-prior" dx="5">/ {{ show.grid.prior }}</tspan></text>
+  <text class="t-sub" x="458" y="284">solar in</text>
+  <text class="t-sub" x="622" y="284" text-anchor="end" style="font-variant-numeric: tabular-nums; fill: var(--ink)">{{ show.solar.text }} {{ show.solar.unit }}<tspan class="t-prior" dx="5">/ {{ show.solar.prior }}</tspan></text>
+  <text class="t-sub" x="458" y="320">grid</text>
+  <text class="t-sub" x="622" y="320" text-anchor="end" style="font-variant-numeric: tabular-nums; fill: var(--ink)">{{ show.grid.text }} {{ show.grid.unit }}<tspan class="t-prior" dx="5">/ {{ show.grid.prior }}</tspan></text>
   <line x1="470" y1="446" x2="610" y2="446" stroke="var(--grid)"/>
   <text class="t-sub" x="540" y="468" text-anchor="middle">house load now</text>
   <text class="t-val {% if not show.house.known %}unknown{% endif %}" x="540" y="504" text-anchor="middle">{{ show.house.text }}<tspan class="t-unit" dx="4">{{ show.house.unit }}</tspan>{% if show.house.known or show.house.prior != "—" %}<tspan class="t-prior" dx="7">/ {{ show.house.prior }}</tspan>{% endif %}</text>
@@ -147,6 +147,6 @@ a.gl:hover { color: #fff; }
   <span><i class="est"></i>estimated from other meters</span>
   <span><i class="none"></i>not metered — a remainder</span>
 </div>
-<p class="note">House load is solar plus grid, so it is only shown when all three are fresh. A dash means no current reading, never zero. The large number is now; the small one after the slash is the average over the previous 24 hours, in the same unit, taken over the time actually seen. A ~ means less than 90% of the day was seen (solar is only recorded by day, so its average is a daytime one); a dash means less than 40%. Gas arrives as whole days, a day or two late, so its number is the latest posted day's average (1 therm = 29.3 kWh of heat, so about 1.2 kW for a therm a day) against the day before; it is heat, not electricity, and isn't part of the house load. The graph icons open the matching Grafana dashboard. Moving dots show current flowing; the PG&amp;E wire reverses when the house is exporting.</p>
+<p class="note">House load is solar plus grid, so it is only shown when all three are fresh. A dash means no current reading, never zero. The large number is now; the small one after the slash is the average over the past 30 days, in the same unit, taken over the time actually seen. A ~ means less than 90% of the 30 days was seen (solar is only recorded by day, so its average is a daytime one); a dash means less than 40%, or, for the panel's solar, house load and everything else, that any input was seen for less than 90% (those are sums of averages, which only add up over the same time). Gas arrives as whole days, a day or two late, so its large number is the latest posted day's average (1 therm = 29.3 kWh of heat, so about 1.2 kW for a therm a day) against its 30-day average; it is heat, not electricity, and isn't part of the house load. The graph icons open the matching Grafana dashboard. Moving dots show current flowing; the PG&amp;E wire reverses when the house is exporting.</p>
 </div>
 {% endblock %}

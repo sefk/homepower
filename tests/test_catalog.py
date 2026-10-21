@@ -240,7 +240,7 @@ class TestGrafanaLinks:
         assert 'href="/grafana/d/homepower-sources"' in content
 
 
-class TestHomePrior24h:
+class TestHomeTrailingAverage:
     def _grid(self, now, covered=True):
         source = Source.objects.create(
             slug="eagle", name="PG&E Grid", kind=Source.Kind.GRID,
@@ -249,8 +249,10 @@ class TestHomePrior24h:
         s = Series.objects.create(source=source, metric="demand_w", unit="W")
         Sample.objects.create(series=s, ts=now - timedelta(seconds=5), duration_s=15, value=1500.0)
         if covered:
-            Sample.objects.create(series=s, ts=now - timedelta(hours=24), duration_s=86400 - 20, value=500.0)
-            record_coverage(s, now - timedelta(hours=24), now, CoverageSpan.State.LIVE)
+            Sample.objects.create(
+                series=s, ts=now - timedelta(days=30) + timedelta(seconds=10),
+                duration_s=30 * 86400 - 60, value=500.0,
+            )
         return s
 
     def test_prior_shares_the_readings_unit(self, db, client):
@@ -267,14 +269,16 @@ class TestHomePrior24h:
     def test_half_covered_average_shows_approximate(self, db, client):
         now = timezone.now()
         s = self._grid(now, covered=False)
-        Sample.objects.create(series=s, ts=now - timedelta(hours=24), duration_s=43200, value=500.0)
-        record_coverage(s, now - timedelta(hours=24), now - timedelta(hours=12), CoverageSpan.State.LIVE)
+        Sample.objects.create(
+            series=s, ts=now - timedelta(days=30) + timedelta(seconds=10),
+            duration_s=15 * 86400, value=500.0,
+        )
         content = client.get("/").content.decode()
         assert "/ ~0.50" in content
 
 
 class TestHomeGas:
-    def test_latest_day_as_thermal_watts_against_the_day_before(self, db, client):
+    def test_latest_day_as_thermal_watts_against_the_30_day_mean(self, db, client):
         now = timezone.now()
         source = Source.objects.create(
             slug="pge_gas", name="PG&E Gas", kind=Source.Kind.GAS,
@@ -285,8 +289,8 @@ class TestHomeGas:
         Sample.objects.create(series=s, ts=now - timedelta(days=2), duration_s=86400, value=58614.2)
         Sample.objects.create(series=s, ts=now - timedelta(days=3), duration_s=86400, value=29307.1)
         content = client.get("/").content.decode()
-        assert "2,442" in content or "2.44" in content  # 58,614 Wh / 24 h
-        assert "/ 1.22" in content or "/ 1,221" in content
+        assert "2.44" in content  # 58,614 Wh / 24 h
+        assert "/ 1.83" in content  # both days: 87,921 Wh / 48 h
 
     def test_stalled_feed_is_a_dash(self, db, client):
         now = timezone.now()

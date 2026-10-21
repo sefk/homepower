@@ -9,7 +9,7 @@ import json
 from datetime import datetime, time, timedelta
 
 from django.conf import settings
-from django.db.models import Min
+from django.db.models import F, FloatField, Min, Sum
 from django.http import Http404, JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
@@ -195,16 +195,17 @@ HOME_LIVE = {
 HOME_IDLE_W = 10  # below this a wire is drawn idle rather than flowing
 
 
-# Share of the prior 24 h that must have been seen for an average to show at
-# all, and the share below which it shows as approximate ("~"). Solar is only
-# recorded by day, so a full 24 h is not a thing to demand of it.
+# The small number after the slash is the mean power over this many trailing
+# days. HOME_AVG_MIN_COVERAGE is the share of them that must have been seen
+# for it to show at all, HOME_AVG_FULL_COVERAGE the share below which it shows
+# as approximate ("~"). Solar is only recorded by day, so a full window is
+# not a thing to demand of it.
+HOME_AVG_DAYS = 30
 HOME_AVG_MIN_COVERAGE = 0.4
 HOME_AVG_FULL_COVERAGE = 0.9
 HOME_GAS_MAX_AGE_DAYS = 5  # PG&E posts a day or two late; older is a stalled feed
-
-
 def _fmt_watts(value, prior=None, partial=False):
-    """Display parts for a power reading and the prior-24h average, in one
+    """Display parts for a power reading and the trailing average, in one
     unit chosen from the reading (the average's from itself when there's no
     reading). Unknown values come back as dashes."""
     ref = value if value is not None else prior
@@ -226,22 +227,30 @@ def _fmt_watts(value, prior=None, partial=False):
 
 
 def _avg_watts(slug, metric, now):
-    """(mean power, covered fraction) over the 24 h before `now`, the mean
-    taken over the time actually seen.
+    """(mean power, seen fraction) over the HOME_AVG_DAYS before `now`.
 
-    The mean is None when under HOME_AVG_MIN_COVERAGE of the window is
-    covered, so an outage never reads as a quiet day."""
-    series = Series.objects.filter(source__slug=slug, metric=metric).first()
-    if series is None:
+    One aggregate query: the time-weighted mean of the samples that exist,
+    so unseen time is left out rather than counted as zero, and the seen
+    fraction is their total duration over the window. (Samples straddling
+    the window's start are skipped; over thirty days that is noise.) The
+    mean is None when under HOME_AVG_MIN_COVERAGE was seen, so an outage
+    never reads as a quiet month."""
+    start = now - timedelta(days=HOME_AVG_DAYS)
+    agg = Sample.objects.filter(
+        series__source__slug=slug, series__metric=metric, ts__gte=start, ts__lt=now
+    ).aggregate(
+        ws=Sum(F("value") * F("duration_s"), output_field=FloatField()),
+        seconds=Sum("duration_s"),
+    )
+    if not agg["seconds"]:
         return None, 0.0
-    start = now - timedelta(hours=24)
-    window = energy_wh(series, start, now)
-    if window.coverage < HOME_AVG_MIN_COVERAGE:
-        return None, window.coverage
-    return window.wh / (24 * window.coverage), window.coverage
+    seen = min(agg["seconds"] / (HOME_AVG_DAYS * 86400), 1.0)
+    if seen < HOME_AVG_MIN_COVERAGE:
+        return None, seen
+    return agg["ws"] / agg["seconds"], seen
 
 
-def _with_derived(vals):
+def _with_derived(vals, strict=False):
     """Add solar, house and unmetered to the per-source readings, the way
     the Sinks dashboard derives them: house load = solar + grid (grid is
     signed, negative when exporting); unknown if any input is."""
@@ -249,9 +258,12 @@ def _with_derived(vals):
     vals["solar"] = None if None in parts[:2] else parts[0] + parts[1]
     vals["house"] = None if None in parts else sum(parts)
     metered = [vals[k] for k in ("ev", "hottub", "navien", "studio", "closet")]
+    # Live, a load with no reading is left out of the subtraction. Averages
+    # are stricter: subtracting a mean that covers a different stretch of
+    # time than the house mean would be arithmetic across windows.
     vals["unmetered"] = (
         None
-        if vals["house"] is None
+        if vals["house"] is None or (strict and None in metered)
         else max(vals["house"] - sum(v for v in metered if v is not None), 0)
     )
     return vals
@@ -278,21 +290,21 @@ def _live_watts(slug, metric, now):
 
 
 def _gas_daily(now):
-    """(day, mean thermal W, previous day's) from PG&E's daily gas readings.
+    """(day, mean thermal W that day, mean over the last HOME_AVG_DAYS posted days).
 
     Gas arrives as whole days, a day or two late, so there is no "now": the
-    latest posted day stands in for it, and the day before for the prior.
-    Therms are energy, so a day's mean thermal power is just its Wh over 24 h
-    (the series is already stored in Wh). None when the latest day is too old
-    to call current."""
+    latest posted day stands in for it. The series is already in Wh of heat
+    (therms are energy), so a day's mean power is its Wh over its hours. None
+    when the latest day is too old to call current."""
     days = list(
         Sample.objects.filter(series__source__slug="pge_gas", series__metric="gas_wh")
-        .order_by("-ts")[:2]
+        .order_by("-ts")[:HOME_AVG_DAYS]
     )
     if not days or now - days[0].ts > timedelta(days=HOME_GAS_MAX_AGE_DAYS):
         return None
-    watts = [d.value / (d.duration_s / 3600) for d in days]
-    return timezone.localtime(days[0].ts).date(), watts[0], (watts[1] if len(watts) > 1 else None)
+    latest = days[0].value / (days[0].duration_s / 3600)
+    mean = sum(d.value for d in days) / (sum(d.duration_s for d in days) / 3600)
+    return timezone.localtime(days[0].ts).date(), latest, mean
 
 
 def home(request):
@@ -301,15 +313,20 @@ def home(request):
     now = timezone.now()
     live = _with_derived({k: _live_watts(slug, m, now) for k, (slug, m) in HOME_LIVE.items()})
     avgs = {k: _avg_watts(slug, m, now) for k, (slug, m) in HOME_LIVE.items()}
-    prior = _with_derived({k: avg for k, (avg, _) in avgs.items()})
-    # A derived average is approximate if any input was seen for less than a
-    # full day: the inputs' observed windows then differ.
     partial = {k: cov < HOME_AVG_FULL_COVERAGE for k, (_, cov) in avgs.items()}
-    partial["solar"] = partial["solaredge"] or partial["envoy"]
-    partial["house"] = partial["solar"] or partial["grid"]
-    partial["unmetered"] = partial["house"] or any(
-        partial[k] for k in ("ev", "hottub", "navien", "studio", "closet")
-    )
+    # Derived averages only from inputs seen for (nearly) the whole window:
+    # sums and differences of means over different stretches of time are
+    # wrong, not just rough (SolarEdge records by day, so its mean is a
+    # daytime one and the grid's is not).
+    prior = {k: avg for k, (avg, _) in avgs.items()}
+    prior |= {
+        k: v
+        for k, v in _with_derived(
+            {k: None if partial[k] else avg for k, (avg, _) in avgs.items()}, strict=True
+        ).items()
+        if k in ("solar", "house", "unmetered")
+    }
+    partial |= dict.fromkeys(("solar", "house", "unmetered"), False)
     gas = _gas_daily(now)
     grid = live["grid"]
     grid_dir = None if grid is None or abs(grid) < HOME_IDLE_W else ("in" if grid > 0 else "out")
