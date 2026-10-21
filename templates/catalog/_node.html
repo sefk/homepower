@@ -10,7 +10,7 @@
     {% if dot %}<circle class="dot {% if val.known %}live{% endif %}" cx="{{ w|add:'-44' }}" cy="19" r="4"/>{% endif %}
   </a>
   {% if graf %}
-  <a class="gl" href="{{ graf }}">
+  <a class="gl" href="{{ graf }}" target="_blank" rel="noopener">
     <title>Open in Grafana</title>
     <rect x="{{ w|add:'-30' }}" y="8" width="22" height="22" rx="6"/>
     <use href="#gicon" x="{{ w|add:'-28' }}" y="10" width="18" height="18"/>

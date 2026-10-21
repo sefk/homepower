@@ -263,3 +263,12 @@ class TestHomePrior24h:
         self._grid(timezone.now(), covered=False)
         content = client.get("/").content.decode()
         assert "/ —" in content
+
+
+def test_grafana_links_open_in_a_new_tab(db, client):
+    import re
+
+    content = client.get("/").content.decode()
+    links = re.findall(r"<a [^>]*(?:grafana|/d/homepower)[^>]*>", content)
+    assert len(links) >= 12  # header + the panel + every card
+    assert all('target="_blank"' in link and "noopener" in link for link in links)
