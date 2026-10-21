@@ -131,7 +131,7 @@ a.gl:hover { color: #fff; }
   {% include "catalog/_node.html" with x=580 y=30 w=230 h=92 name="Guest house solar" val=show.envoy kind="direct" how="Enphase Envoy · local, every minute" href=solar_url graf=graf.envoy dot=1 %}
   {% url 'catalog:grid' as grid_url %}
   {% include "catalog/_node.html" with x=30 y=290 w=230 h=92 name="PG&E grid" val=show.grid kind="direct" how="Eagle 3 on the smart meter · ~15 s" href=grid_url graf=graf.grid dot=1 name_extra=grid_label %}
-  {% include "catalog/_node.html" with x=30 y=560 w=230 h=92 name="PG&E gas" name_extra=" · thermal" val=show.gas kind="none" how=gas_how graf=graf.gas %}
+  {% include "catalog/_node.html" with x=30 y=402 w=230 h=92 name="PG&E gas" name_extra=" · thermal" val=show.gas kind="none" how=gas_how graf=graf.gas %}
 
   {% url 'catalog:ev' as ev_url %}
   {% include "catalog/_node.html" with x=830 y=170 w=240 h=80 name="Tesla Model S" val=show.ev kind="cloud" how="Tesla Fleet API · charging power" href=ev_url graf=graf.ev %}
