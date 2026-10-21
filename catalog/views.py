@@ -200,6 +200,7 @@ HOME_IDLE_W = 10  # below this a wire is drawn idle rather than flowing
 # recorded by day, so a full 24 h is not a thing to demand of it.
 HOME_AVG_MIN_COVERAGE = 0.4
 HOME_AVG_FULL_COVERAGE = 0.9
+HOME_GAS_MAX_AGE_DAYS = 5  # PG&E posts a day or two late; older is a stalled feed
 
 
 def _fmt_watts(value, prior=None, partial=False):
@@ -276,6 +277,24 @@ def _live_watts(slug, metric, now):
     return sample.value
 
 
+def _gas_daily(now):
+    """(day, mean thermal W, previous day's) from PG&E's daily gas readings.
+
+    Gas arrives as whole days, a day or two late, so there is no "now": the
+    latest posted day stands in for it, and the day before for the prior.
+    Therms are energy, so a day's mean thermal power is just its Wh over 24 h
+    (the series is already stored in Wh). None when the latest day is too old
+    to call current."""
+    days = list(
+        Sample.objects.filter(series__source__slug="pge_gas", series__metric="gas_wh")
+        .order_by("-ts")[:2]
+    )
+    if not days or now - days[0].ts > timedelta(days=HOME_GAS_MAX_AGE_DAYS):
+        return None
+    watts = [d.value / (d.duration_s / 3600) for d in days]
+    return timezone.localtime(days[0].ts).date(), watts[0], (watts[1] if len(watts) > 1 else None)
+
+
 def home(request):
     """House power diagram: what feeds the house, what draws from it, and
     which meter sees each piece, with the latest reading where one is fresh."""
@@ -291,6 +310,7 @@ def home(request):
     partial["unmetered"] = partial["house"] or any(
         partial[k] for k in ("ev", "hottub", "navien", "studio", "closet")
     )
+    gas = _gas_daily(now)
     grid = live["grid"]
     grid_dir = None if grid is None or abs(grid) < HOME_IDLE_W else ("in" if grid > 0 else "out")
     ctx = {
@@ -309,7 +329,9 @@ def home(request):
             "unmetered": grafana.url(request, "homepower-sink-summary"),
             "gas": grafana.url(request, "homepower-gas"),
         },
-        "show": {key: _fmt_watts(value, prior[key], partial[key]) for key, value in live.items()},
+        "show": {key: _fmt_watts(value, prior[key], partial[key]) for key, value in live.items()}
+        | {"gas": _fmt_watts(*gas[1:]) if gas else _fmt_watts(None)},
+        "gas_how": f"{gas[0]:%b} {gas[0].day} average · pge.com, daily" if gas else "pge.com · no recent reading",
         # which wires carry current right now (below the floor reads as idle)
         "on": {key: value is not None and abs(value) >= HOME_IDLE_W for key, value in live.items()},
         "grid_dir": grid_dir,

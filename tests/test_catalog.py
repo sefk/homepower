@@ -273,6 +273,32 @@ class TestHomePrior24h:
         assert "/ ~0.50" in content
 
 
+class TestHomeGas:
+    def test_latest_day_as_thermal_watts_against_the_day_before(self, db, client):
+        now = timezone.now()
+        source = Source.objects.create(
+            slug="pge_gas", name="PG&E Gas", kind=Source.Kind.GAS,
+            poll_interval_s=86400, native_resolution_s=86400,
+        )
+        s = Series.objects.create(source=source, metric="gas_wh", unit="Wh")
+        # 2 therms (58,614 Wh) two days ago, 1 therm the day before that
+        Sample.objects.create(series=s, ts=now - timedelta(days=2), duration_s=86400, value=58614.2)
+        Sample.objects.create(series=s, ts=now - timedelta(days=3), duration_s=86400, value=29307.1)
+        content = client.get("/").content.decode()
+        assert "2,442" in content or "2.44" in content  # 58,614 Wh / 24 h
+        assert "/ 1.22" in content or "/ 1,221" in content
+
+    def test_stalled_feed_is_a_dash(self, db, client):
+        now = timezone.now()
+        source = Source.objects.create(
+            slug="pge_gas", name="PG&E Gas", kind=Source.Kind.GAS,
+            poll_interval_s=86400, native_resolution_s=86400,
+        )
+        s = Series.objects.create(source=source, metric="gas_wh", unit="Wh")
+        Sample.objects.create(series=s, ts=now - timedelta(days=20), duration_s=86400, value=29307.1)
+        assert "no recent reading" in client.get("/").content.decode()
+
+
 def test_grafana_links_open_in_a_new_tab(db, client):
     import re
 
