@@ -148,12 +148,12 @@ a.gl:hover { color: #fff; }
   <span><i class="est"></i>estimated from other meters</span>
   <span><i class="none"></i>not metered — a remainder</span>
 </div>
+
+<p>Notes:</p>
 <ul class="note">
-  <li>The large number is now. A dash means no current reading, never zero.</li>
-  <li>The small number after the slash is the average for this hour of the day over the previous 30 days, in the same unit, taken over the time actually seen. A dash means less than 40% of those hours were seen: SolarEdge records nothing at night, for one.</li>
-  <li>Gas arrives as whole days, a day or two late, so its large number is the latest posted day's average against its 30-day average. 1 therm is 29.3 kWh of heat, about 1.2 kW for a therm a day. It is heat, not electricity, and isn't part of the house load.</li>
-  <li>House load is solar plus grid, so it is only shown when all three are fresh. The averages for house load and solar in show only when every input was seen for 90% of those hours, because averages only add up over the same time. Everything else is averaged day by day over the days its inputs were all seen (at least 3), and says how many days when that is fewer than 30.</li>
-  <li>The graph icons open the matching Grafana dashboard.</li>
+  <li><strong>Measures</strong>. The large number is now. A dash means no current reading, never zero. The small number after the slash is the average for this hour of the day over the previous 30 days, in the same unit, taken over the time actually seen. A dash means less than 40% of those hours were seen: SolarEdge records nothing at night, for one.</li>
+  <li><strong>House load</strong> is solar plus grid, so it is only shown when all three are fresh. The averages for house load and solar in show only when every input was seen for 90% of those hours, because averages only add up over the same time. Everything else is averaged day by day over the days its inputs were all seen (at least 3), and says how many days when that is fewer than 30.</li>
+  <li><strong>Gas</strong> arrives as whole days, a day or two late, so its large number is the latest posted day's average against its 30-day average. 1 therm is 29.3 kWh of heat, about 1.2 kW for a therm a day. It is heat, not electricity, and isn't part of the house load.</li>
 </ul>
 </div>
 {% endblock %}
