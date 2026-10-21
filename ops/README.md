@@ -37,7 +37,7 @@ sudo launchctl bootout system/com.sefk.homepower        # stop + unload
 ## Grafana (live dashboards)
 
 Grafana reads the same SQLite database directly and serves real-time
-dashboards on **http://studio.local:3425/**. It only ever reads: the SQLite
+dashboards on **http://studio.local:3425/grafana/**. It only ever reads: the SQLite
 datasource plugin forces `_pragma=query_only(1)`, so the Django process stays
 the single writer. Nothing about the collectors changes to support it.
 

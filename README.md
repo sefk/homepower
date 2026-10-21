@@ -89,7 +89,7 @@ analysis with the question it answers. Highlights:
 - `/ev/` — Tesla charge sessions: kWh, actual cost, and what shifting
   the session past 9pm would have cost instead
 
-A Grafana instance on **http://localhost:3425/** serves live dashboards off
+A Grafana instance on **http://localhost:3425/grafana/** serves live dashboards off
 the same SQLite database, read-only — Sources, Sinks, Sources and Sinks,
 Live Power (10s refresh), Energy, Gas, and Data Health. It's config-as-code in `ops/grafana/`; install and operation are
 in [ops/README.md][ops].

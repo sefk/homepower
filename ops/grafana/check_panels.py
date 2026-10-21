@@ -18,7 +18,7 @@ import time
 import urllib.error
 import urllib.request
 
-BASE = "http://localhost:3425"
+BASE = "http://localhost:3425/grafana"
 DASHBOARDS = pathlib.Path(__file__).parent / "dashboards"
 
 NOW_MS = int(time.time() * 1000)

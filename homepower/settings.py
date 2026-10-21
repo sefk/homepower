@@ -218,4 +218,4 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 # the same origin. GRAFANA_SUBPATH is Grafana's own serve_from_sub_path prefix.
 GRAFANA_PORT = int(os.environ.get("GRAFANA_PORT", "3425"))
 GRAFANA_PROXY_PATH = "/grafana"
-GRAFANA_SUBPATH = os.environ.get("GRAFANA_SUBPATH", "")
+GRAFANA_SUBPATH = os.environ.get("GRAFANA_SUBPATH", "/grafana")
