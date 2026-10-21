@@ -1,11 +1,11 @@
-{# One diagram card at (x, y), w wide and h tall. Params: name, val (display dict), how, kind (direct|cloud|est|none), href, graf, unit_extra, dot. #}
+{# One diagram card at (x, y), w wide and h tall. Params: name, val (display dict), how, kind (direct|cloud|est|none), href, graf, name_extra, dot. #}
 <g transform="translate({{ x }} {{ y }})">
   <a class="node" href="{{ href|default:'' }}"{% if not href %} style="pointer-events: none"{% endif %}>
     <rect class="card-bg {% if kind == 'est' or kind == 'none' %}{{ kind }}{% endif %}" width="{{ w }}" height="{{ h }}" rx="10"/>
     <rect class="stripe {{ kind }}" width="6" height="{{ h }}" rx="3"/>
-    <text class="t-name" x="22" y="24">{{ name }}</text>
+    <text class="t-name" x="22" y="24">{{ name }}{{ name_extra }}</text>
     {% if sub %}<text class="t-sub" x="22" y="50">{{ sub }}</text>{% endif %}
-    {% if val %}<text class="t-val {% if not val.known %}unknown{% endif %}" x="22" y="56">{{ val.text }}<tspan class="t-unit" dx="4">{{ val.unit }}{{ unit_extra }}</tspan></text>{% endif %}
+    {% if val %}<text class="t-val {% if not val.known %}unknown{% endif %}" x="22" y="56">{{ val.text }}<tspan class="t-unit" dx="4">{{ val.unit }}</tspan>{% if val.known or val.prior != "—" %}<tspan class="t-prior" dx="7">/ {{ val.prior }}</tspan>{% endif %}</text>{% endif %}
     <text class="t-how" x="22" y="{{ h|add:'-8' }}">{{ how }}</text>
     {% if dot %}<circle class="dot {% if val.known %}live{% endif %}" cx="{{ w|add:'-44' }}" cy="19" r="4"/>{% endif %}
   </a>

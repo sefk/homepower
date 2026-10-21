@@ -238,3 +238,28 @@ class TestGrafanaLinks:
         content = resp.content.decode()
         assert 'href="/grafana/"' in content
         assert 'href="/grafana/d/homepower-sources"' in content
+
+
+class TestHomePrior24h:
+    def _grid(self, now, covered=True):
+        source = Source.objects.create(
+            slug="eagle", name="PG&E Grid", kind=Source.Kind.GRID,
+            poll_interval_s=15, native_resolution_s=15,
+        )
+        s = Series.objects.create(source=source, metric="demand_w", unit="W")
+        Sample.objects.create(series=s, ts=now - timedelta(seconds=5), duration_s=15, value=1500.0)
+        if covered:
+            Sample.objects.create(series=s, ts=now - timedelta(hours=24), duration_s=86400 - 20, value=500.0)
+            record_coverage(s, now - timedelta(hours=24), now, CoverageSpan.State.LIVE)
+        return s
+
+    def test_prior_shares_the_readings_unit(self, db, client):
+        self._grid(timezone.now())
+        content = client.get("/").content.decode()
+        assert "1.50" in content  # 1500 W now, shown in kW...
+        assert "/ 0.50" in content  # ...so the 500 W average is too
+
+    def test_thin_coverage_gives_a_dash_not_an_average(self, db, client):
+        self._grid(timezone.now(), covered=False)
+        content = client.get("/").content.decode()
+        assert "/ —" in content

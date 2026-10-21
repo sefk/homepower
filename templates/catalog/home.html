@@ -31,6 +31,7 @@
 .t-val.unknown { fill: var(--muted); }
 .t-unit { font-size: 13px; fill: var(--ink-2); font-weight: 500; }
 .t-sub { font-size: 11.5px; fill: var(--ink-2); }
+.t-prior { font-size: 15px; fill: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
 .t-how { font-size: 11px; fill: var(--muted); }
 .t-zone { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; fill: var(--muted); font-weight: 600; }
 .card-bg { fill: var(--surface); stroke: var(--border); stroke-width: 1; }
@@ -116,19 +117,19 @@ a.gl:hover { color: #fff; }
   <text class="t-name" x="540" y="222" text-anchor="middle">Main panel</text>
   <text class="t-sub" x="540" y="240" text-anchor="middle">200 A service</text>
   <text class="t-sub" x="470" y="284">solar in</text>
-  <text class="t-sub" x="610" y="284" text-anchor="end" style="font-variant-numeric: tabular-nums; fill: var(--ink)">{{ show.solar.text }} {{ show.solar.unit }}</text>
+  <text class="t-sub" x="610" y="284" text-anchor="end" style="font-variant-numeric: tabular-nums; fill: var(--ink)">{{ show.solar.text }} {{ show.solar.unit }}<tspan class="t-prior" dx="5">/ {{ show.solar.prior }}</tspan></text>
   <text class="t-sub" x="470" y="320">grid</text>
-  <text class="t-sub" x="610" y="320" text-anchor="end" style="font-variant-numeric: tabular-nums; fill: var(--ink)">{{ show.grid.text }} {{ show.grid.unit }}</text>
+  <text class="t-sub" x="610" y="320" text-anchor="end" style="font-variant-numeric: tabular-nums; fill: var(--ink)">{{ show.grid.text }} {{ show.grid.unit }}<tspan class="t-prior" dx="5">/ {{ show.grid.prior }}</tspan></text>
   <line x1="470" y1="446" x2="610" y2="446" stroke="var(--grid)"/>
   <text class="t-sub" x="540" y="468" text-anchor="middle">house load now</text>
-  <text class="t-val {% if not show.house.known %}unknown{% endif %}" x="540" y="504" text-anchor="middle">{{ show.house.text }}<tspan class="t-unit" dx="4">{{ show.house.unit }}</tspan></text>
+  <text class="t-val {% if not show.house.known %}unknown{% endif %}" x="540" y="504" text-anchor="middle">{{ show.house.text }}<tspan class="t-unit" dx="4">{{ show.house.unit }}</tspan>{% if show.house.known or show.house.prior != "—" %}<tspan class="t-prior" dx="7">/ {{ show.house.prior }}</tspan>{% endif %}</text>
   <a class="gl" href="{{ graf.house }}"><title>Open in Grafana</title><rect x="610" y="198" width="22" height="22" rx="6"/><use href="#gicon" x="612" y="200" width="18" height="18"/></a>
 
   {% url 'catalog:solar' as solar_url %}
   {% include "catalog/_node.html" with x=290 y=30 w=230 h=92 name="Main house solar" val=show.solaredge kind="cloud" how="SolarEdge · cloud, every 15 min" href=solar_url graf=graf.solaredge dot=1 %}
   {% include "catalog/_node.html" with x=580 y=30 w=230 h=92 name="Guest house solar" val=show.envoy kind="direct" how="Enphase Envoy · local, every minute" href=solar_url graf=graf.envoy dot=1 %}
   {% url 'catalog:grid' as grid_url %}
-  {% include "catalog/_node.html" with x=30 y=290 w=230 h=92 name="PG&E grid" val=show.grid kind="direct" how="Eagle 3 on the smart meter · ~15 s" href=grid_url graf=graf.grid dot=1 unit_extra=grid_label %}
+  {% include "catalog/_node.html" with x=30 y=290 w=230 h=92 name="PG&E grid" val=show.grid kind="direct" how="Eagle 3 on the smart meter · ~15 s" href=grid_url graf=graf.grid dot=1 name_extra=grid_label %}
   {% include "catalog/_node.html" with x=30 y=560 w=230 h=92 name="PG&E gas" sub="Heat and cooking · off the panel" kind="none" how="pge.com · daily, 1–2 days behind" graf=graf.gas %}
 
   {% url 'catalog:ev' as ev_url %}
@@ -146,6 +147,6 @@ a.gl:hover { color: #fff; }
   <span><i class="est"></i>estimated from other meters</span>
   <span><i class="none"></i>not metered — a remainder</span>
 </div>
-<p class="note">House load is solar plus grid, so it is only shown when all three are fresh. A dash means no current reading, never zero. The graph icons open the matching Grafana dashboard. Moving dots show current flowing; the PG&amp;E wire reverses when the house is exporting.</p>
+<p class="note">House load is solar plus grid, so it is only shown when all three are fresh. A dash means no current reading, never zero. The large number is now; the small one after the slash is the average over the previous 24 hours, in the same unit, taken over the time actually seen (a dash if less than 90% of it was). The graph icons open the matching Grafana dashboard. Moving dots show current flowing; the PG&amp;E wire reverses when the house is exporting.</p>
 </div>
 {% endblock %}

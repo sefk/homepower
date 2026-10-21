@@ -195,12 +195,60 @@ HOME_LIVE = {
 HOME_IDLE_W = 10  # below this a wire is drawn idle rather than flowing
 
 
-def _fmt_watts(value):
-    if value is None:
-        return {"text": "—", "unit": "", "known": False}
-    if abs(value) >= 1000:
-        return {"text": f"{abs(value) / 1000:.2f}", "unit": "kW", "known": True}
-    return {"text": f"{abs(value):.0f}", "unit": "W", "known": True}
+HOME_AVG_MIN_COVERAGE = 0.9  # of the prior 24 h; below it the average is unknown
+
+
+def _fmt_watts(value, prior=None):
+    """Display parts for a power reading and the prior-24h average, in one
+    unit chosen from the reading (the average's from itself when there's no
+    reading). Unknown values come back as dashes."""
+    ref = value if value is not None else prior
+    kilo = ref is not None and abs(ref) >= 1000
+
+    def part(v, signed=False):
+        if v is None:
+            return None
+        sign = "−" if signed and v < 0 else ""
+        v = abs(v)
+        return sign + (f"{v / 1000:.2f}" if kilo else f"{v:,.0f}")
+
+    return {
+        "text": part(value) or "—",
+        "unit": "" if ref is None else ("kW" if kilo else "W"),
+        "known": value is not None,
+        "prior": part(prior, signed=True) or "—",
+    }
+
+
+def _avg_watts(slug, metric, now):
+    """Mean power over the 24 h before `now`, over the time actually seen.
+
+    Unknown (None) when under HOME_AVG_MIN_COVERAGE of the window is
+    covered, so an outage never reads as a quiet day."""
+    series = Series.objects.filter(source__slug=slug, metric=metric).first()
+    if series is None:
+        return None
+    start = now - timedelta(hours=24)
+    window = energy_wh(series, start, now)
+    if window.coverage < HOME_AVG_MIN_COVERAGE:
+        return None
+    return window.wh / (24 * window.coverage)
+
+
+def _with_derived(vals):
+    """Add solar, house and unmetered to the per-source readings, the way
+    the Sinks dashboard derives them: house load = solar + grid (grid is
+    signed, negative when exporting); unknown if any input is."""
+    parts = [vals["solaredge"], vals["envoy"], vals["grid"]]
+    vals["solar"] = None if None in parts[:2] else parts[0] + parts[1]
+    vals["house"] = None if None in parts else sum(parts)
+    metered = [vals[k] for k in ("ev", "hottub", "navien", "studio", "closet")]
+    vals["unmetered"] = (
+        None
+        if vals["house"] is None
+        else max(vals["house"] - sum(v for v in metered if v is not None), 0)
+    )
+    return vals
 
 
 def _live_watts(slug, metric, now):
@@ -227,18 +275,8 @@ def home(request):
     """House power diagram: what feeds the house, what draws from it, and
     which meter sees each piece, with the latest reading where one is fresh."""
     now = timezone.now()
-    live = {key: _live_watts(slug, metric, now) for key, (slug, metric) in HOME_LIVE.items()}
-    parts = [live["solaredge"], live["envoy"], live["grid"]]
-    # Same derivation as the Sinks dashboard: house load = solar + grid
-    # (grid is signed, negative when exporting). Unknown if any input is.
-    live["solar"] = None if None in parts[:2] else parts[0] + parts[1]
-    live["house"] = None if None in parts else sum(parts)
-    metered = [live[k] for k in ("ev", "hottub", "navien", "studio", "closet")]
-    live["unmetered"] = (
-        None
-        if live["house"] is None
-        else max(live["house"] - sum(v for v in metered if v is not None), 0)
-    )
+    live = _with_derived({k: _live_watts(slug, m, now) for k, (slug, m) in HOME_LIVE.items()})
+    prior = _with_derived({k: _avg_watts(slug, m, now) for k, (slug, m) in HOME_LIVE.items()})
     grid = live["grid"]
     grid_dir = None if grid is None or abs(grid) < HOME_IDLE_W else ("in" if grid > 0 else "out")
     ctx = {
@@ -257,11 +295,11 @@ def home(request):
             "unmetered": grafana.url(request, "homepower-sink-summary"),
             "gas": grafana.url(request, "homepower-gas"),
         },
-        "show": {key: _fmt_watts(value) for key, value in live.items()},
+        "show": {key: _fmt_watts(value, prior[key]) for key, value in live.items()},
         # which wires carry current right now (below the floor reads as idle)
         "on": {key: value is not None and abs(value) >= HOME_IDLE_W for key, value in live.items()},
         "grid_dir": grid_dir,
-        "grid_label": {"in": " importing", "out": " exporting", None: ""}[grid_dir] or (" idle" if grid is not None else ""),
+        "grid_label": {"in": " · importing", "out": " · exporting", None: ""}[grid_dir] or (" · idle" if grid is not None else ""),
     }
     return render(request, "catalog/home.html", ctx)
 
