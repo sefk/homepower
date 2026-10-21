@@ -72,8 +72,11 @@ uv run python manage.py serve --no-collect   # UI only (development)
 uv run pytest                                # test suite
 ```
 
-Then http://localhost:8425/ — the analysis catalog index, every view
-listed with the question it answers. Highlights:
+Then http://localhost:8425/ — a diagram of the house's power setup: both
+solar arrays and the grid feeding the main panel, each load drawn from it,
+and which meter sees each piece, with the latest fresh reading on every
+node (a dash, never zero, when there isn't one). `/catalog/` lists every
+analysis with the question it answers. Highlights:
 
 - `/health/` — per-source coverage timeline, freshness, recent failures
 - `/solar/`, `/grid/` — production and demand at native resolution,

@@ -6,7 +6,7 @@ import pytest
 from django.utils import timezone
 
 from core.coverage import record_coverage
-from core.models import CollectorRun, CoverageSpan, Sample, Source
+from core.models import CollectorRun, CoverageSpan, Sample, Series, Source
 
 from .conftest import utc
 
@@ -107,7 +107,7 @@ class TestHealth:
     def test_index_no_longer_redirects(self, db, client):
         # / is the catalog index now (see tests/test_cost_views.py); this
         # just guards against the old redirect-to-health behavior coming back.
-        resp = client.get("/")
+        resp = client.get("/catalog/")
         assert resp.status_code == 200
         assert not hasattr(resp, "url")
 
@@ -197,3 +197,30 @@ class TestSolarNoDataNote:
     def test_no_note_when_every_array_has_data(self, solar_day, client):
         content = client.get("/solar/?date=2026-08-01").content.decode()
         assert 'class="small no-data"' not in content
+
+
+class TestHome:
+    def test_renders_diagram_with_unknowns_when_empty(self, db, client):
+        resp = client.get("/")
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        assert "Main house solar" in content
+        assert "Network closet" in content
+        assert "—" in content  # no data reads as unknown, not zero
+
+    def test_shows_fresh_reading_and_house_load(self, db, client):
+        now = timezone.now()
+        for slug, metric, name, value, res in [
+            ("envoy", "production_w", "Guest House Solar", 800.0, 60),
+            ("solaredge", "production_w", "Main House Solar", 2200.0, 900),
+            ("eagle", "demand_w", "PG&E Grid", -500.0, 15),
+        ]:
+            source = Source.objects.create(
+                slug=slug, name=name, kind=Source.Kind.SOLAR,
+                poll_interval_s=res, native_resolution_s=res,
+            )
+            s = Series.objects.create(source=source, metric=metric, unit="W")
+            Sample.objects.create(series=s, ts=now - timedelta(seconds=5), duration_s=res, value=value)
+        content = client.get("/").content.decode()
+        assert "2.50" in content  # 800 + 2200 - 500 = 2500 W house load
+        assert "exporting" in content

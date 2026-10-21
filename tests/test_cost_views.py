@@ -38,7 +38,7 @@ def grid_series(db) -> Series:
 
 class TestIndex:
     def test_lists_analyses_and_answers_200(self, db, client):
-        resp = client.get("/")
+        resp = client.get("/catalog/")
         assert resp.status_code == 200
         content = resp.content.decode()
         # built views, grouped
@@ -62,7 +62,7 @@ class TestIndex:
         assert "needs the Eagle 3" not in content
 
     def test_entries_link_to_their_views(self, db, client):
-        resp = client.get("/")
+        resp = client.get("/catalog/")
         content = resp.content.decode()
         assert '/trueup/"' in content
         assert '/peak/"' in content

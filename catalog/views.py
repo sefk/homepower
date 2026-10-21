@@ -178,12 +178,83 @@ WAITING_GROUP = {
 }
 
 
+# Loads drawn on the home diagram: (node key, source slug, metric).
+HOME_LIVE = {
+    "solaredge": ("solaredge", "production_w"),
+    "envoy": ("envoy", "production_w"),
+    "grid": ("eagle", "demand_w"),
+    "ev": ("tesla", "ev_charge_power_w"),
+    "hottub": ("hottub_est", "power_w"),
+    "navien": ("navien", "power_w"),
+    "studio": ("studio", "power_w"),
+    "closet": ("closet", "power_w"),
+}
+
+
+HOME_IDLE_W = 10  # below this a wire is drawn idle rather than flowing
+
+
+def _fmt_watts(value):
+    if value is None:
+        return {"text": "—", "unit": "", "known": False}
+    if abs(value) >= 1000:
+        return {"text": f"{abs(value) / 1000:.2f}", "unit": "kW", "known": True}
+    return {"text": f"{abs(value):.0f}", "unit": "W", "known": True}
+
+
+def _live_watts(slug, metric, now):
+    """Latest reading if it is still fresh, else None (unknown, never zero).
+
+    A sample is current while `now` is inside its own interval plus the
+    source's staleness allowance, so a 15-minute SolarEdge point still
+    counts for its quarter hour."""
+    sample = (
+        Sample.objects.filter(series__source__slug=slug, series__metric=metric)
+        .select_related("series__source")
+        .order_by("-ts")
+        .first()
+    )
+    if sample is None:
+        return None
+    allowance = timedelta(seconds=sample.duration_s + sample.series.source.poll_interval_s * (STALE_POLLS - 1))
+    if now - sample.ts > allowance:
+        return None
+    return sample.value
+
+
+def home(request):
+    """House power diagram: what feeds the house, what draws from it, and
+    which meter sees each piece, with the latest reading where one is fresh."""
+    now = timezone.now()
+    live = {key: _live_watts(slug, metric, now) for key, (slug, metric) in HOME_LIVE.items()}
+    parts = [live["solaredge"], live["envoy"], live["grid"]]
+    # Same derivation as the Sinks dashboard: house load = solar + grid
+    # (grid is signed, negative when exporting). Unknown if any input is.
+    live["solar"] = None if None in parts[:2] else parts[0] + parts[1]
+    live["house"] = None if None in parts else sum(parts)
+    metered = [live[k] for k in ("ev", "hottub", "navien", "studio", "closet")]
+    live["unmetered"] = (
+        None
+        if live["house"] is None
+        else max(live["house"] - sum(v for v in metered if v is not None), 0)
+    )
+    grid = live["grid"]
+    ctx = {
+        "section": "home",
+        "show": {key: _fmt_watts(value) for key, value in live.items()},
+        # which wires carry current right now (below the floor reads as idle)
+        "on": {key: value is not None and abs(value) >= HOME_IDLE_W for key, value in live.items()},
+        "grid_dir": None if grid is None or abs(grid) < HOME_IDLE_W else ("in" if grid > 0 else "out"),
+    }
+    return render(request, "catalog/home.html", ctx)
+
+
 def index(request):
     """The analysis catalog — every view, grouped, with the question it answers."""
     return render(
         request,
         "catalog/index.html",
-        {"groups": CATALOG_GROUPS, "waiting": WAITING_GROUP},
+        {"groups": CATALOG_GROUPS, "waiting": WAITING_GROUP, "section": "catalog"},
     )
 
 

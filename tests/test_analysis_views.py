@@ -312,7 +312,7 @@ class TestSolarhealthPage:
 
 class TestIndexLive:
     def test_new_analyses_are_live_with_links(self, db, client):
-        resp = client.get("/")
+        resp = client.get("/catalog/")
         content = resp.content.decode()
         for title in ["Overnight floor", "Electrification modeling", "Self-consumption", "Solar health"]:
             assert title in content
@@ -320,7 +320,7 @@ class TestIndexLive:
             assert f'{path}"' in content
 
     def test_stale_hardware_reasons_are_fixed(self, db, client):
-        resp = client.get("/")
+        resp = client.get("/catalog/")
         content = resp.content.decode()
         assert "needs the Eagle 3" not in content
         assert "load-identification models" in content
