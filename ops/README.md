@@ -19,11 +19,12 @@ two sets of collectors poll the vendors and the ports clash) and use the
 `Procfile` with [honcho][honcho]:
 
 ```sh
-honcho start                       # app on :8425, Grafana on :3425
-HOMEPOWER_PORT=8426 GRAFANA_PORT=3426 honcho start grafana   # beside the daemons
+honcho start        # app on :8425, Grafana on :3425
 ```
 
-Both read `.env`; the page's Grafana links follow `GRAFANA_PORT`.
+Both read `.env`, and `HOMEPOWER_PORT` / `GRAFANA_PORT` move the ports (the
+page's Grafana links follow `GRAFANA_PORT`). Grafana uses the same
+`var/grafana/` state as the daemon, so don't run two at once.
 
 Check it:
 
