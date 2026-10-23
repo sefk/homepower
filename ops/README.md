@@ -13,6 +13,18 @@ Deploy the working tree (tests, migrate, restart, wait until it answers):
 bin/deploy              # restarts the app and Grafana; --no-grafana, --no-test to skip
 ```
 
+To run the stack in the foreground instead (development), stop the daemons
+(`sudo launchctl bootout system/com.sefk.homepower` and `.grafana`; otherwise
+two sets of collectors poll the vendors and the ports clash) and use the
+`Procfile` with [honcho][honcho]:
+
+```sh
+honcho start                       # app on :8425, Grafana on :3425
+HOMEPOWER_PORT=8426 GRAFANA_PORT=3426 honcho start grafana   # beside the daemons
+```
+
+Both read `.env`; the page's Grafana links follow `GRAFANA_PORT`.
+
 Check it:
 
 ```sh
@@ -348,3 +360,4 @@ otherwise tier 1; summer is always tier 1.
 [sankey]: https://grafana.com/grafana/plugins/netsage-sankey-panel/
 [heatmap]: https://grafana.com/grafana/plugins/marcusolsson-hourly-heatmap-panel/
 [opower]: https://github.com/tronikos/opower
+[honcho]: https://github.com/nickstenning/honcho
