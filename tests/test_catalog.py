@@ -240,6 +240,13 @@ class TestGrafanaLinks:
         assert 'href="/grafana/d/homepower-sources"' in content
 
 
+    def test_front_door_is_judged_by_host_not_the_real_server_port(self, db, client):
+        # Behind a proxy the app still listens on SERVE_PORT; only the Host says
+        # how the viewer arrived.
+        resp = client.get("/", HTTP_HOST="solar.kloninger.com", SERVER_PORT="8425")
+        assert 'href="/grafana/"' in resp.content.decode()
+
+
 class TestHomeHourOfDayAverage:
     def _grid(self, now, days=20, hours_seen=1):
         """The Eagle, with a 500 W sample for this hour on `days` of the past
