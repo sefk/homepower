@@ -94,6 +94,19 @@
   },
   "panels": [
     {
+      "type": "row",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 40,
+      "title": "Right now and since midnight — ignores the time picker"
+    },
+    {
       "type": "stat",
       "id": 1,
       "title": "Solar now",
@@ -102,7 +115,7 @@
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 0
+        "y": 1
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -155,7 +168,7 @@
         "h": 4,
         "w": 4,
         "x": 4,
-        "y": 0
+        "y": 1
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -220,7 +233,7 @@
         "h": 4,
         "w": 4,
         "x": 8,
-        "y": 0
+        "y": 1
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -273,7 +286,7 @@
         "h": 4,
         "w": 4,
         "x": 12,
-        "y": 0
+        "y": 1
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -326,7 +339,7 @@
         "h": 4,
         "w": 4,
         "x": 16,
-        "y": 0
+        "y": 1
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -379,7 +392,7 @@
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 0
+        "y": 1
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -424,6 +437,19 @@
       }
     },
     {
+      "type": "row",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "id": 41,
+      "title": "Over the selected range"
+    },
+    {
       "type": "timeseries",
       "id": 10,
       "title": "Power — solar production vs. grid demand",
@@ -432,7 +458,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 4
+        "y": 6
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -576,7 +602,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 14
+        "y": 16
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -656,7 +682,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 22
+        "y": 24
       }
     },
     {
@@ -668,7 +694,7 @@
         "h": 9,
         "w": 6,
         "x": 0,
-        "y": 23
+        "y": 25
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -738,7 +764,7 @@
         "h": 9,
         "w": 18,
         "x": 6,
-        "y": 23
+        "y": 25
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -853,7 +879,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 32
+        "y": 34
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
