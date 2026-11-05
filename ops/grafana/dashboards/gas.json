@@ -219,7 +219,7 @@
     {
       "type": "stat",
       "id": 4,
-      "title": "Summer baseline",
+      "title": "Summer baseline — latest Jun–Aug",
       "description": "Average therms per day over the latest June–August on record — what the house burns with no heating (water, cooking). Ignores the time picker.",
       "gridPos": {
         "h": 4,
@@ -443,7 +443,7 @@
     {
       "type": "barchart",
       "id": 8,
-      "title": "Gas by month — year over year",
+      "title": "Gas by month — year over year, all history",
       "description": "Therms in each calendar month, one bar per year, every year on record. This year in full colour, last year lighter, earlier years grey. The first month and the current month are partial, and a month with unreported days reads low. Ignores the time picker.",
       "gridPos": {
         "h": 9,
