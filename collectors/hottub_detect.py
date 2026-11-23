@@ -5,8 +5,8 @@ and return what they found plus diagnostics. collectors/hottub_estimate.py
 does the I/O.
 
 The signature (see docs): the heater is a ~5.3 kW resistive step that
-switches ON on the clock at 02:03:20-02:04:50 and 14:03:20-14:04:50 local
-and runs 14-60 min; the pump draws ~0.5 kW for a fixed hour,
+switches ON on the clock at 02:03:20-02:04:50 and 14:03:20-14:04:50 on the
+tub's own clock (TUB_CLOCK, which ignores daylight saving) and runs 14-60 min; the pump draws ~0.5 kW for a fixed hour,
 h:01:40 -> (h+1):01:40, with or without the heater. Nothing here is
 metered -- a window the meter did not cover yields no estimate at all
 (the caller leaves a gap), never a guess.
@@ -18,7 +18,13 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-WINDOW_HOURS = (2, 14)  # local clock hours the hot tub's timer fires
+WINDOW_HOURS = (2, 14)  # hours on TUB_CLOCK when the hot tub's timer fires
+# The tub's timer keeps fixed UTC-7 (it was set during PDT and doesn't
+# change for daylight saving): through 2026-10-31 the heater switched on
+# at ~02:04/14:04 PDT, from 2026-11-01 at ~01:04/13:04 PST -- 09:04/21:04
+# UTC throughout. If the tub's clock is ever reset, change this. (POSIX
+# sign convention: Etc/GMT+7 is UTC-7.)
+TUB_CLOCK = ZoneInfo("Etc/GMT+7")
 GATE_FROM_S = 2 * 60  # heater-on accepted h:02:00 .. h:08:00
 GATE_TO_S = 8 * 60
 WINDOW_END_S = 70 * 60  # a window spans h:00 .. (h+1):10

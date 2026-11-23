@@ -4,7 +4,7 @@ Nothing is polled. Every ~15 minutes this re-derives the trailing local
 days from the whole-home meter (collectors/hottub_detect.py) and rewrites
 them: piecewise-constant Samples at 0 W / pump / pump+heater, so the
 per-load charts show real zeros between runs. It is an estimate -- derived
-from meter step changes at 2am/2pm, not metered -- and says so in its name.
+from meter step changes at the tub's 2am/2pm timer, not metered -- and says so in its name.
 
 Gap rules: samples exist only where the Eagle's coverage does, and a window
 the Eagle did not cover (under WINDOW_COVERED of its span) is left unknown,
@@ -25,6 +25,7 @@ from core.models import CoverageSpan, Sample, Series, Source
 
 from .base import Collector, Reading
 from .hottub_detect import (
+    TUB_CLOCK,
     WINDOW_HOURS,
     WindowResult,
     detect_window,
@@ -56,17 +57,22 @@ def _utc(epoch: float) -> datetime:
     return datetime.fromtimestamp(epoch, dt_timezone.utc)
 
 
-def day_bounds(day: date, now: datetime, tz: ZoneInfo) -> tuple[datetime, datetime] | None:
-    """(start, end) of what can be claimed for `day`, or None. A finished
-    day is claimed whole; the current one only through its last finished
-    window; a future day not at all."""
+def day_bounds(
+    day: date, now: datetime, tz: ZoneInfo, tub_tz: ZoneInfo = TUB_CLOCK
+) -> tuple[datetime, datetime] | None:
+    """(start, end) of what can be claimed for `day` (a house-local day,
+    `tz`), or None. A finished day is claimed whole; the current one only
+    through its last finished window (on the tub's clock, `tub_tz`); a
+    future day not at all. The tub's clock is at most an hour from house
+    time and its windows sit at 2am/2pm, so each falls inside the same
+    house day."""
     start = datetime.combine(day, time(0), tz).astimezone(dt_timezone.utc)
     full_end = datetime.combine(day + timedelta(days=1), time(0), tz).astimezone(dt_timezone.utc)
     if now >= full_end:
         return start, full_end
     end = None
     for hour in WINDOW_HOURS:
-        _, w_end = window_span(day, hour, tz)
+        _, w_end = window_span(day, hour, tub_tz)
         if now.timestamp() >= w_end:
             end = _utc(w_end)
     return (start, end) if end else None
@@ -119,7 +125,7 @@ def derive_day(day: date, now: datetime, write: bool = True) -> DayResult:
     claims: list[tuple[float, float, float]] = []
     unobserved: list[tuple[float, float]] = []
     for hour in WINDOW_HOURS:
-        w_start, w_end = window_span(day, hour, tz)
+        w_start, w_end = window_span(day, hour, TUB_CLOCK)
         if w_end > end.timestamp():
             continue  # window not finished yet; not part of this claim
         if coverage.covered_fraction(eagle, _utc(w_start), _utc(w_end)) < WINDOW_COVERED:
@@ -134,7 +140,7 @@ def derive_day(day: date, now: datetime, write: bool = True) -> DayResult:
             flags,
         )
         tesla = tesla_blackouts(_samples("tesla", "ev_charge_power_w", a - 3600, b + 3600))
-        res = detect_window(day, hour, load, tesla, tz)
+        res = detect_window(day, hour, load, tesla, TUB_CLOCK)
         res.flags[:0] = flags
         result.windows.append(res)
         claims += res.segments()

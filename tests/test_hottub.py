@@ -9,7 +9,7 @@ import pytest
 from django.core.management import call_command
 
 from collectors import hottub_estimate
-from collectors.hottub_detect import detect_window, house_load, tesla_blackouts
+from collectors.hottub_detect import TUB_CLOCK, detect_window, house_load, tesla_blackouts
 from collectors.hottub_estimate import HotTubEstimateCollector, derive_day
 from core import coverage
 from core.models import CollectorRun, CoverageSpan, Sample, Series, Source
@@ -24,9 +24,14 @@ def local(day, h, m=0, s=0):
     return datetime(day.year, day.month, day.day, h, m, s, tzinfo=LA)
 
 
+def tub(day, h, m=0, s=0):
+    """A time on the hot tub's own clock (fixed UTC-7; equals LA in summer)."""
+    return datetime(day.year, day.month, day.day, h, m, s, tzinfo=TUB_CLOCK)
+
+
 def trace(day, hour, heater=(None, None), heater_w=5300.0, pump_w=850.0, step=10, extra=None):
-    """[(ts, W)] every `step` s over the window, h-0:05 .. h+1:15."""
-    start = local(day, hour).timestamp()
+    """[(ts, W)] every `step` s over the window, h-0:05 .. h+1:15 tub time."""
+    start = tub(day, hour).timestamp()
     out = []
     for t in range(-300, 75 * 60, step):
         w = BASE
@@ -41,7 +46,7 @@ def trace(day, hour, heater=(None, None), heater_w=5300.0, pump_w=850.0, step=10
 
 
 def detect(load, hour=2, day=DAY, blackouts=()):
-    return detect_window(day, hour, load, list(blackouts), LA)
+    return detect_window(day, hour, load, list(blackouts), TUB_CLOCK)
 
 
 def at(r, ts):
@@ -141,14 +146,24 @@ def test_gaps_in_eagle_break_edges():
     assert detect(load).heater_on is None  # the rise falls inside a hole: unknown, not invented
 
 
-def test_dst_day_uses_local_clock():
-    """Nov 1 2026 falls back at 02:00 PDT -> 01:00 PST; the 2am window is
-    02:00 PST = 10:00 UTC, not 09:00."""
-    day = date(2026, 11, 1)
+def test_tub_clock_ignores_daylight_saving():
+    """The tub's timer keeps UTC-7 year-round: after Nov 1 2026 falls back,
+    its 2am window is 09:00 UTC = 01:00 PST, not 02:00 PST."""
+    day = date(2026, 11, 10)
     r = detect(trace(day, 2, heater=(224, 224 + 28 * 60)), day=day)
-    assert datetime.fromtimestamp(r.start, UTC).hour == 10
+    assert datetime.fromtimestamp(r.start, UTC).hour == 9
     assert r.heater_on is not None
-    assert at(r, r.heater_on).hour == 2
+    assert at(r, r.heater_on).hour == 1  # house clock
+    summer = detect(trace(DAY, 2, heater=(224, 224 + 28 * 60)))
+    assert at(summer, summer.start).hour == 2  # in PDT the clocks agree
+
+
+def test_winter_run_at_house_2am_is_not_the_tub():
+    """The bug this guards: a heater step at 02:03 PST (an hour after the
+    tub's real window) must not be read as the tub."""
+    day = date(2026, 11, 10)
+    shifted = [(ts + 3600, w) for ts, w in trace(day, 2, heater=(224, 224 + 28 * 60))]
+    assert detect(shifted, day=day).heater_on is None
 
 
 # ---------- writer ----------
@@ -173,7 +188,7 @@ def load_eagle(eagle, day, windows=(2, 14), heaters=None, covered=True):
         rows.append((ts.timestamp(), BASE))
     by_ts = dict(rows)
     for hour in windows:
-        start = local(day, hour).timestamp()
+        start = tub(day, hour).timestamp()
         for t in range(-300, 75 * 60, 10):
             by_ts.pop(start + t, None)
         for ts, w in trace(day, hour, heater=heaters.get(hour, (None, None))):
@@ -294,7 +309,7 @@ def test_dst_day_writes_25_hours(eagle):
     coverage.record_coverage(eagle, local(day, 0), local(day + timedelta(days=1), 0), CoverageSpan.State.LIVE)
     r = derive_day(day, local(day + timedelta(days=1), 1))
     assert r.windows[0].heater_on is not None
-    assert datetime.fromtimestamp(r.windows[0].start, UTC).hour == 10
+    assert datetime.fromtimestamp(r.windows[0].start, UTC).hour == 9  # tub clock, UTC-7
     ts, dur, _ = out_rows()[-1]
     assert (ts + timedelta(seconds=dur) - local(day, 0).astimezone(UTC)) == timedelta(hours=25)
 
@@ -359,3 +374,24 @@ def test_health_judges_estimate_by_its_runs(eagle, client):
     assert b"Hot Tub (estimated)" in resp.content
     row = next(s for s in resp.context["sources"] if s["source"].slug == "hottub_est")
     assert not row["stale"]
+
+
+def test_winter_day_lands_heater_at_house_1am(eagle):
+    day = date(2026, 11, 10)
+    load_eagle(eagle, day, heaters={2: (224, 224 + 1700), 14: (224, 224 + 1800)})
+    r = derive_day(day, local(day + timedelta(days=1), 1))
+    assert [w.heater_on is not None for w in r.windows] == [True, True]
+    heater_hours = sorted(
+        {s.astimezone(LA).hour for s, _, w in out_rows() if w > 5000}
+    )
+    assert heater_hours == [1, 13]
+
+
+def test_winter_partial_day_claims_the_tub_window_once_finished(eagle):
+    """Tub window 2am-3:10 tub time = 1am-2:10 PST: finished by 02:30 PST."""
+    day = date(2026, 11, 10)
+    load_eagle(eagle, day, heaters={2: (224, 224 + 1700)})
+    r = derive_day(day, local(day, 2, 30))
+    assert [w.hour for w in r.windows] == [2]
+    ts, dur, _ = out_rows()[-1]
+    assert ts + timedelta(seconds=dur) == local(day, 2, 10).astimezone(UTC)
