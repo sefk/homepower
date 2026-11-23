@@ -83,6 +83,13 @@ class Collector(ABC):
         (Tesla) vary this with what the last poll saw."""
         return self.poll_interval_s
 
+    def startup_delay_s(self) -> float:
+        """Seconds to wait after process start before setup and the first
+        poll. Zero for free local devices; a pay-per-request vendor
+        (Tesla) returns the time left until the poll it last scheduled,
+        so a restart loop can't spend requests faster than its cadence."""
+        return 0.0
+
     @abstractmethod
     async def poll(self) -> list[Reading]:
         """Fetch current readings from the vendor. Raise on failure."""

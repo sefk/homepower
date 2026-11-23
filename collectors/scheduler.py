@@ -5,7 +5,8 @@ varies next_interval_s()) measured poll-start to poll-start, so a slow
 vendor response doesn't drift the schedule. Setup failures (bad
 credentials, vendor down) retry with backoff instead of killing the
 loop — the source just stays absent, which the coverage model already
-treats honestly as unknown.
+treats honestly as unknown. A collector can ask to wait before its
+first setup (startup_delay_s), so restarts don't reset a paid cadence.
 """
 
 import asyncio
@@ -27,6 +28,10 @@ RUN_RETENTION_DAYS = 30
 
 async def run_collector(collector: Collector) -> None:
     """Set up, then poll forever on the collector's cadence."""
+    delay = collector.startup_delay_s()
+    if delay > 0:
+        logger.info("%s waiting %ds for its next scheduled poll", collector.slug, delay)
+        await asyncio.sleep(delay)
     while True:
         try:
             await collector.setup()

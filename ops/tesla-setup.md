@@ -20,7 +20,11 @@ The collector is shaped to stay inside it:
 That's roughly 100 requests/day. As a backstop against a polling bug,
 every Fleet API call counts against `TESLA_MONTHLY_REQUEST_BUDGET`
 (default 4000), tracked in `var/tesla_usage.json`; once spent, polls fail
-without calling Tesla until the next month. Leaving billing details off
+without calling Tesla until the next month. The same file holds when the
+next poll is due, and a restarted server waits until then instead of
+polling at once, so restarts (even a crash loop) don't add requests. Set
+`TESLA_VIN` too: without it every start spends a request looking the car
+up. Leaving billing details off
 the developer app keeps Tesla from charging beyond the credit.
 
 Power readings are snapshots, so a session's start can show up to 30

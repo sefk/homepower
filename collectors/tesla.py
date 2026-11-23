@@ -20,6 +20,9 @@ monthly credit, so polling is shaped to stay inside it:
 - Every Fleet API call counts against a monthly budget persisted in
   var/; once spent, polls fail without touching the API until the next
   calendar month.
+- The next poll's due time is persisted beside that count, and a
+  restarted process waits for it rather than polling at once, so a
+  crash loop costs no more requests than the normal cadence.
 
 Power readings are snapshots held until the next poll, so a session's
 start can lag by up to one idle interval. Energy doesn't: each
@@ -39,7 +42,7 @@ recording a failed run and leaving coverage unknown.
 import json
 import logging
 import math
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import aiohttp
@@ -94,8 +97,8 @@ class BudgetExhausted(RuntimeError):
 
 
 class RequestBudget:
-    """Fleet API calls made this calendar month (local time), on disk so
-    a restart can't reset the count."""
+    """Fleet API calls made this calendar month (local time), plus when
+    the next poll is due, on disk so a restart can reset neither."""
 
     def __init__(self, path: Path, limit: int):
         self.path = Path(path)
@@ -104,11 +107,19 @@ class RequestBudget:
     def _month(self) -> str:
         return timezone.localtime().strftime("%Y-%m")
 
-    def used(self) -> int:
+    def _read(self) -> dict:
         try:
             data = json.loads(self.path.read_text())
         except (OSError, ValueError):
-            return 0
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def _write(self, data: dict) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(json.dumps(data))
+
+    def used(self) -> int:
+        data = self._read()
         return data.get("requests", 0) if data.get("month") == self._month() else 0
 
     def spend(self) -> None:
@@ -118,8 +129,20 @@ class RequestBudget:
                 f"tesla: monthly request budget spent ({used}/{self.limit}); "
                 "polling resumes next month"
             )
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps({"month": self._month(), "requests": used + 1}))
+        data = self._read()
+        data.update(month=self._month(), requests=used + 1)
+        self._write(data)
+
+    def next_poll(self) -> datetime | None:
+        try:
+            return datetime.fromisoformat(self._read()["next_poll"])
+        except (KeyError, TypeError, ValueError):
+            return None
+
+    def set_next_poll(self, at: datetime) -> None:
+        data = self._read()
+        data["next_poll"] = at.isoformat()
+        self._write(data)
 
 
 class TeslaCollector(Collector):
@@ -170,6 +193,25 @@ class TeslaCollector(Collector):
 
     def next_interval_s(self) -> int:
         return CHARGING_INTERVAL_S if self._charging else IDLE_INTERVAL_S
+
+    def startup_delay_s(self) -> float:
+        # Resume the cadence the last process scheduled instead of polling
+        # at once: on 2026-11-03/04 a ~30 s launchd crash loop restarted
+        # the server ~1,850 times and each restart's immediate poll spent
+        # a request, exhausting the month's budget.
+        due = self.budget.next_poll()
+        if due is None:
+            return 0.0
+        # Clamp so a clock jump or corrupt file can't stall polling for
+        # longer than one idle interval.
+        return min(max(0.0, (due - timezone.now()).total_seconds()), IDLE_INTERVAL_S)
+
+    async def run_once(self) -> bool:
+        ok = await super().run_once()
+        self.budget.set_next_poll(
+            timezone.now() + timedelta(seconds=self.next_interval_s())
+        )
+        return ok
 
     async def setup(self) -> None:
         await super().setup()

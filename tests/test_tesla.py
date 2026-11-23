@@ -15,6 +15,7 @@ import json
 from datetime import timedelta
 
 import pytest
+from django.utils import timezone
 from tesla_fleet_api.exceptions import VehicleOffline
 
 from collectors.registry import enabled_collectors
@@ -391,6 +392,73 @@ class TestRequestBudget:
         collector, holder = make_collector(tmp_path, vin=None)
         setup(collector)
         assert json.loads((tmp_path / "tesla_usage.json").read_text())["requests"] == 1
+
+
+def remaining(collector):
+    """startup_delay_s(), rounded: a few ms pass between write and read."""
+    return round(collector.startup_delay_s())
+
+
+class TestRestartKeepsCadence:
+    """A restart resumes the cadence the last process scheduled, so a
+    launchd crash loop can't spend a request per restart."""
+
+    def test_no_record_polls_at_once(self, tmp_path):
+        collector, _ = make_collector(tmp_path)
+        assert collector.startup_delay_s() == 0.0
+
+    def test_restart_waits_out_the_idle_interval(self, tmp_path, transactional_db):
+        collector, holder = make_collector(tmp_path)
+        setup(collector)
+        holder["client"].data["charge_state"] = charge_state(charging=False)
+        asyncio.run(collector.run_once())
+
+        restarted, _ = make_collector(tmp_path)
+        assert remaining(restarted) == IDLE_INTERVAL_S
+
+    def test_restart_while_charging_waits_the_short_interval(self, tmp_path, transactional_db):
+        collector, _ = make_collector(tmp_path)
+        setup(collector)
+        asyncio.run(collector.run_once())  # charging by default
+
+        restarted, _ = make_collector(tmp_path)
+        assert remaining(restarted) == CHARGING_INTERVAL_S
+
+    def test_failed_poll_still_schedules_the_next(self, tmp_path, transactional_db):
+        collector, holder = make_collector(tmp_path)
+        setup(collector)
+        holder["client"].state = "offline"
+        assert asyncio.run(collector.run_once()) is False
+
+        restarted, _ = make_collector(tmp_path)
+        assert remaining(restarted) == IDLE_INTERVAL_S
+
+    def test_overdue_poll_runs_at_once(self, tmp_path):
+        usage = tmp_path / "tesla_usage.json"
+        past = timezone.now() - timedelta(hours=2)
+        usage.write_text(json.dumps({"month": "2020-01", "requests": 1, "next_poll": past.isoformat()}))
+        collector, _ = make_collector(tmp_path)
+        assert collector.startup_delay_s() == 0.0
+
+    def test_far_future_or_garbage_is_clamped(self, tmp_path):
+        usage = tmp_path / "tesla_usage.json"
+        future = timezone.now() + timedelta(days=3)
+        usage.write_text(json.dumps({"next_poll": future.isoformat()}))
+        collector, _ = make_collector(tmp_path)
+        assert collector.startup_delay_s() == IDLE_INTERVAL_S
+
+        usage.write_text(json.dumps({"next_poll": "not a time"}))
+        assert collector.startup_delay_s() == 0.0
+
+    def test_spending_keeps_the_schedule_and_scheduling_keeps_the_count(
+        self, tmp_path, transactional_db
+    ):
+        collector, _ = make_collector(tmp_path)
+        setup(collector)
+        asyncio.run(collector.run_once())
+        data = json.loads((tmp_path / "tesla_usage.json").read_text())
+        assert data["requests"] == 2
+        assert "next_poll" in data
 
 
 def test_fakes_only_use_methods_the_real_library_has():
