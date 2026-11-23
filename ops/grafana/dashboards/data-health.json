@@ -33,10 +33,10 @@
         "type": "constant",
         "hide": 2,
         "description": "Per-series status query shared by every section's table. The VALUES list sets what's normal for each source.",
-        "query": "WITH expect(k, section, basis, ok_s, late_s, expected) AS (VALUES\n  ('eagle',                     'live',      'sample',    120,    900, 'pushed every ~10 s'),\n  ('envoy',                     'live',      'sample',    300,   1800, 'every minute, zeros at night'),\n  ('navien',                    'live',      'sample',    300,   1800, 'every minute'),\n  ('studio',                    'live',      'sample',    300,   1800, 'every minute'),\n  ('closet',                    'live',      'sample',    300,   1800, 'every minute'),\n  ('solaredge',                 'scheduled', 'poll',     2700,  10800, '15-min blocks, daylight only'),\n  ('hottub_est',                'scheduled', 'poll',     2700,  10800, 'only during a soak'),\n  ('tesla/ev_charge_power_w',   'scheduled', 'sample',   7200,  21600, '30 min, 5 when charging'),\n  ('tesla/ev_charge_energy_wh', 'scheduled', 'poll',     7200,  21600, 'only while the car is awake'),\n  ('pge_gas',                   'scheduled', 'sample', 345600, 604800, 'daily, 1-3 days behind'),\n  ('eagle/grid_import_wh',      'manual',    'none',     NULL,   NULL, 'Green Button CSV, by hand'),\n  ('eagle/grid_export_wh',      'manual',    'none',     NULL,   NULL, 'Green Button CSV, by hand')\n),\nlast_ok AS (\n  SELECT source_id, MAX(started) AS t FROM core_collectorrun WHERE ok = 1 GROUP BY source_id\n),\ns AS (\n  SELECT se.id AS series_id,\n         so.slug || '/' || se.metric AS series,\n         so.enabled AS enabled,\n         COALESCE(e1.section, e2.section, 'live') AS section,\n         COALESCE(e1.basis, e2.basis, 'sample') AS basis,\n         COALESCE(e1.ok_s, e2.ok_s, 300) AS ok_s,\n         COALESCE(e1.late_s, e2.late_s, 1800) AS late_s,\n         COALESCE(e1.expected, e2.expected, 'no expectation set; judged as every minute') AS expected,\n         strftime('%s', 'now') - strftime('%s', (SELECT MAX(ts) FROM core_sample WHERE series_id = se.id)) AS age,\n         CAST(strftime('%s', (SELECT MAX(ts) FROM core_sample WHERE series_id = se.id)) AS INTEGER) AS last_sample,\n         strftime('%s', 'now') - strftime('%s', lo.t) AS poll_age,\n         CAST(strftime('%s', lo.t) AS INTEGER) AS last_poll\n    FROM core_series se\n    JOIN core_source so ON so.id = se.source_id\n    LEFT JOIN expect e1 ON e1.k = so.slug || '/' || se.metric\n    LEFT JOIN expect e2 ON e2.k = so.slug\n    LEFT JOIN last_ok lo ON lo.source_id = so.id\n),\nj AS (\n  SELECT s.*, CASE basis WHEN 'poll' THEN poll_age ELSE age END AS judged_age FROM s\n)\nSELECT j.*,\n       CASE WHEN NOT enabled THEN 'disabled'\n            WHEN section = 'manual' THEN 'manual'\n            WHEN judged_age IS NULL OR judged_age > late_s THEN 'problem'\n            WHEN judged_age > ok_s THEN 'late'\n            ELSE 'OK' END AS status,\n       CASE WHEN NOT enabled THEN 4\n            WHEN section = 'manual' THEN 3\n            WHEN judged_age IS NULL OR judged_age > late_s THEN 0\n            WHEN judged_age > ok_s THEN 1\n            ELSE 2 END AS rank\n  FROM j",
+        "query": "WITH expect(k, section, basis, ok_s, late_s, expected, hint) AS (VALUES\n  ('eagle',                     'live',      'sample',    120,    900, 'pushed every ~10 s', 'Device off the network, or the server stopped'),\n  ('envoy',                     'live',      'sample',    300,   1800, 'every minute, zeros at night', 'Device off the network, or the server stopped'),\n  ('navien',                    'live',      'sample',    300,   1800, 'every minute', 'Device off the network, or the server stopped'),\n  ('studio',                    'live',      'sample',    300,   1800, 'every minute', 'Device off the network, or the server stopped'),\n  ('closet',                    'live',      'sample',    300,   1800, 'every minute', 'Device off the network, or the server stopped'),\n  ('solaredge',                 'scheduled', 'poll',     2700,  10800, '15-min blocks, daylight only', 'SolarEdge portal login or outage'),\n  ('hottub_est',                'scheduled', 'poll',     2700,  10800, 'only during a soak', 'Estimator failing; check the meters it reads'),\n  ('tesla/ev_charge_power_w',   'scheduled', 'sample',   7200,  21600, '30 min, 5 when charging', 'Monthly API budget spent, car offline, or token (manage.py tesla_auth)'),\n  ('tesla/ev_charge_energy_wh', 'scheduled', 'poll',     7200,  21600, 'only while the car is awake', 'Monthly API budget spent, car offline, or token (manage.py tesla_auth)'),\n  ('pge_gas',                   'scheduled', 'sample', 345600, 604800, 'daily, 1-3 days behind', 'PG&E sign-in expired: run manage.py pge_auth'),\n  ('eagle/grid_import_wh',      'manual',    'none',     NULL,   NULL, 'Green Button CSV, by hand', NULL),\n  ('eagle/grid_export_wh',      'manual',    'none',     NULL,   NULL, 'Green Button CSV, by hand', NULL)\n),\nlast_ok AS (\n  SELECT source_id, MAX(started) AS t FROM core_collectorrun WHERE ok = 1 GROUP BY source_id\n),\ns AS (\n  SELECT se.id AS series_id,\n         so.id AS source_id,\n         so.slug || '/' || se.metric AS series,\n         so.enabled AS enabled,\n         COALESCE(e1.section, e2.section, 'live') AS section,\n         COALESCE(e1.basis, e2.basis, 'sample') AS basis,\n         COALESCE(e1.ok_s, e2.ok_s, 300) AS ok_s,\n         COALESCE(e1.late_s, e2.late_s, 1800) AS late_s,\n         COALESCE(e1.expected, e2.expected, 'no expectation set; judged as every minute') AS expected,\n         COALESCE(e1.hint, e2.hint, 'Check Failed polls for this source') AS hint,\n         lo.t AS last_poll_ts,\n         strftime('%s', 'now') - strftime('%s', (SELECT MAX(ts) FROM core_sample WHERE series_id = se.id)) AS age,\n         CAST(strftime('%s', (SELECT MAX(ts) FROM core_sample WHERE series_id = se.id)) AS INTEGER) AS last_sample,\n         strftime('%s', 'now') - strftime('%s', lo.t) AS poll_age,\n         CAST(strftime('%s', lo.t) AS INTEGER) AS last_poll\n    FROM core_series se\n    JOIN core_source so ON so.id = se.source_id\n    LEFT JOIN expect e1 ON e1.k = so.slug || '/' || se.metric\n    LEFT JOIN expect e2 ON e2.k = so.slug\n    LEFT JOIN last_ok lo ON lo.source_id = so.id\n),\nj AS (\n  SELECT s.*, CASE basis WHEN 'poll' THEN poll_age ELSE age END AS judged_age FROM s\n)\nSELECT j.*,\n       CASE WHEN NOT enabled THEN 'disabled'\n            WHEN section = 'manual' THEN 'manual'\n            WHEN judged_age IS NULL OR judged_age > late_s THEN 'problem'\n            WHEN judged_age > ok_s THEN 'late'\n            ELSE 'OK' END AS status,\n       CASE WHEN NOT enabled THEN 4\n            WHEN section = 'manual' THEN 3\n            WHEN judged_age IS NULL OR judged_age > late_s THEN 0\n            WHEN judged_age > ok_s THEN 1\n            ELSE 2 END AS rank\n  FROM j",
         "current": {
-          "text": "WITH expect(k, section, basis, ok_s, late_s, expected) AS (VALUES\n  ('eagle',                     'live',      'sample',    120,    900, 'pushed every ~10 s'),\n  ('envoy',                     'live',      'sample',    300,   1800, 'every minute, zeros at night'),\n  ('navien',                    'live',      'sample',    300,   1800, 'every minute'),\n  ('studio',                    'live',      'sample',    300,   1800, 'every minute'),\n  ('closet',                    'live',      'sample',    300,   1800, 'every minute'),\n  ('solaredge',                 'scheduled', 'poll',     2700,  10800, '15-min blocks, daylight only'),\n  ('hottub_est',                'scheduled', 'poll',     2700,  10800, 'only during a soak'),\n  ('tesla/ev_charge_power_w',   'scheduled', 'sample',   7200,  21600, '30 min, 5 when charging'),\n  ('tesla/ev_charge_energy_wh', 'scheduled', 'poll',     7200,  21600, 'only while the car is awake'),\n  ('pge_gas',                   'scheduled', 'sample', 345600, 604800, 'daily, 1-3 days behind'),\n  ('eagle/grid_import_wh',      'manual',    'none',     NULL,   NULL, 'Green Button CSV, by hand'),\n  ('eagle/grid_export_wh',      'manual',    'none',     NULL,   NULL, 'Green Button CSV, by hand')\n),\nlast_ok AS (\n  SELECT source_id, MAX(started) AS t FROM core_collectorrun WHERE ok = 1 GROUP BY source_id\n),\ns AS (\n  SELECT se.id AS series_id,\n         so.slug || '/' || se.metric AS series,\n         so.enabled AS enabled,\n         COALESCE(e1.section, e2.section, 'live') AS section,\n         COALESCE(e1.basis, e2.basis, 'sample') AS basis,\n         COALESCE(e1.ok_s, e2.ok_s, 300) AS ok_s,\n         COALESCE(e1.late_s, e2.late_s, 1800) AS late_s,\n         COALESCE(e1.expected, e2.expected, 'no expectation set; judged as every minute') AS expected,\n         strftime('%s', 'now') - strftime('%s', (SELECT MAX(ts) FROM core_sample WHERE series_id = se.id)) AS age,\n         CAST(strftime('%s', (SELECT MAX(ts) FROM core_sample WHERE series_id = se.id)) AS INTEGER) AS last_sample,\n         strftime('%s', 'now') - strftime('%s', lo.t) AS poll_age,\n         CAST(strftime('%s', lo.t) AS INTEGER) AS last_poll\n    FROM core_series se\n    JOIN core_source so ON so.id = se.source_id\n    LEFT JOIN expect e1 ON e1.k = so.slug || '/' || se.metric\n    LEFT JOIN expect e2 ON e2.k = so.slug\n    LEFT JOIN last_ok lo ON lo.source_id = so.id\n),\nj AS (\n  SELECT s.*, CASE basis WHEN 'poll' THEN poll_age ELSE age END AS judged_age FROM s\n)\nSELECT j.*,\n       CASE WHEN NOT enabled THEN 'disabled'\n            WHEN section = 'manual' THEN 'manual'\n            WHEN judged_age IS NULL OR judged_age > late_s THEN 'problem'\n            WHEN judged_age > ok_s THEN 'late'\n            ELSE 'OK' END AS status,\n       CASE WHEN NOT enabled THEN 4\n            WHEN section = 'manual' THEN 3\n            WHEN judged_age IS NULL OR judged_age > late_s THEN 0\n            WHEN judged_age > ok_s THEN 1\n            ELSE 2 END AS rank\n  FROM j",
-          "value": "WITH expect(k, section, basis, ok_s, late_s, expected) AS (VALUES\n  ('eagle',                     'live',      'sample',    120,    900, 'pushed every ~10 s'),\n  ('envoy',                     'live',      'sample',    300,   1800, 'every minute, zeros at night'),\n  ('navien',                    'live',      'sample',    300,   1800, 'every minute'),\n  ('studio',                    'live',      'sample',    300,   1800, 'every minute'),\n  ('closet',                    'live',      'sample',    300,   1800, 'every minute'),\n  ('solaredge',                 'scheduled', 'poll',     2700,  10800, '15-min blocks, daylight only'),\n  ('hottub_est',                'scheduled', 'poll',     2700,  10800, 'only during a soak'),\n  ('tesla/ev_charge_power_w',   'scheduled', 'sample',   7200,  21600, '30 min, 5 when charging'),\n  ('tesla/ev_charge_energy_wh', 'scheduled', 'poll',     7200,  21600, 'only while the car is awake'),\n  ('pge_gas',                   'scheduled', 'sample', 345600, 604800, 'daily, 1-3 days behind'),\n  ('eagle/grid_import_wh',      'manual',    'none',     NULL,   NULL, 'Green Button CSV, by hand'),\n  ('eagle/grid_export_wh',      'manual',    'none',     NULL,   NULL, 'Green Button CSV, by hand')\n),\nlast_ok AS (\n  SELECT source_id, MAX(started) AS t FROM core_collectorrun WHERE ok = 1 GROUP BY source_id\n),\ns AS (\n  SELECT se.id AS series_id,\n         so.slug || '/' || se.metric AS series,\n         so.enabled AS enabled,\n         COALESCE(e1.section, e2.section, 'live') AS section,\n         COALESCE(e1.basis, e2.basis, 'sample') AS basis,\n         COALESCE(e1.ok_s, e2.ok_s, 300) AS ok_s,\n         COALESCE(e1.late_s, e2.late_s, 1800) AS late_s,\n         COALESCE(e1.expected, e2.expected, 'no expectation set; judged as every minute') AS expected,\n         strftime('%s', 'now') - strftime('%s', (SELECT MAX(ts) FROM core_sample WHERE series_id = se.id)) AS age,\n         CAST(strftime('%s', (SELECT MAX(ts) FROM core_sample WHERE series_id = se.id)) AS INTEGER) AS last_sample,\n         strftime('%s', 'now') - strftime('%s', lo.t) AS poll_age,\n         CAST(strftime('%s', lo.t) AS INTEGER) AS last_poll\n    FROM core_series se\n    JOIN core_source so ON so.id = se.source_id\n    LEFT JOIN expect e1 ON e1.k = so.slug || '/' || se.metric\n    LEFT JOIN expect e2 ON e2.k = so.slug\n    LEFT JOIN last_ok lo ON lo.source_id = so.id\n),\nj AS (\n  SELECT s.*, CASE basis WHEN 'poll' THEN poll_age ELSE age END AS judged_age FROM s\n)\nSELECT j.*,\n       CASE WHEN NOT enabled THEN 'disabled'\n            WHEN section = 'manual' THEN 'manual'\n            WHEN judged_age IS NULL OR judged_age > late_s THEN 'problem'\n            WHEN judged_age > ok_s THEN 'late'\n            ELSE 'OK' END AS status,\n       CASE WHEN NOT enabled THEN 4\n            WHEN section = 'manual' THEN 3\n            WHEN judged_age IS NULL OR judged_age > late_s THEN 0\n            WHEN judged_age > ok_s THEN 1\n            ELSE 2 END AS rank\n  FROM j"
+          "text": "WITH expect(k, section, basis, ok_s, late_s, expected, hint) AS (VALUES\n  ('eagle',                     'live',      'sample',    120,    900, 'pushed every ~10 s', 'Device off the network, or the server stopped'),\n  ('envoy',                     'live',      'sample',    300,   1800, 'every minute, zeros at night', 'Device off the network, or the server stopped'),\n  ('navien',                    'live',      'sample',    300,   1800, 'every minute', 'Device off the network, or the server stopped'),\n  ('studio',                    'live',      'sample',    300,   1800, 'every minute', 'Device off the network, or the server stopped'),\n  ('closet',                    'live',      'sample',    300,   1800, 'every minute', 'Device off the network, or the server stopped'),\n  ('solaredge',                 'scheduled', 'poll',     2700,  10800, '15-min blocks, daylight only', 'SolarEdge portal login or outage'),\n  ('hottub_est',                'scheduled', 'poll',     2700,  10800, 'only during a soak', 'Estimator failing; check the meters it reads'),\n  ('tesla/ev_charge_power_w',   'scheduled', 'sample',   7200,  21600, '30 min, 5 when charging', 'Monthly API budget spent, car offline, or token (manage.py tesla_auth)'),\n  ('tesla/ev_charge_energy_wh', 'scheduled', 'poll',     7200,  21600, 'only while the car is awake', 'Monthly API budget spent, car offline, or token (manage.py tesla_auth)'),\n  ('pge_gas',                   'scheduled', 'sample', 345600, 604800, 'daily, 1-3 days behind', 'PG&E sign-in expired: run manage.py pge_auth'),\n  ('eagle/grid_import_wh',      'manual',    'none',     NULL,   NULL, 'Green Button CSV, by hand', NULL),\n  ('eagle/grid_export_wh',      'manual',    'none',     NULL,   NULL, 'Green Button CSV, by hand', NULL)\n),\nlast_ok AS (\n  SELECT source_id, MAX(started) AS t FROM core_collectorrun WHERE ok = 1 GROUP BY source_id\n),\ns AS (\n  SELECT se.id AS series_id,\n         so.id AS source_id,\n         so.slug || '/' || se.metric AS series,\n         so.enabled AS enabled,\n         COALESCE(e1.section, e2.section, 'live') AS section,\n         COALESCE(e1.basis, e2.basis, 'sample') AS basis,\n         COALESCE(e1.ok_s, e2.ok_s, 300) AS ok_s,\n         COALESCE(e1.late_s, e2.late_s, 1800) AS late_s,\n         COALESCE(e1.expected, e2.expected, 'no expectation set; judged as every minute') AS expected,\n         COALESCE(e1.hint, e2.hint, 'Check Failed polls for this source') AS hint,\n         lo.t AS last_poll_ts,\n         strftime('%s', 'now') - strftime('%s', (SELECT MAX(ts) FROM core_sample WHERE series_id = se.id)) AS age,\n         CAST(strftime('%s', (SELECT MAX(ts) FROM core_sample WHERE series_id = se.id)) AS INTEGER) AS last_sample,\n         strftime('%s', 'now') - strftime('%s', lo.t) AS poll_age,\n         CAST(strftime('%s', lo.t) AS INTEGER) AS last_poll\n    FROM core_series se\n    JOIN core_source so ON so.id = se.source_id\n    LEFT JOIN expect e1 ON e1.k = so.slug || '/' || se.metric\n    LEFT JOIN expect e2 ON e2.k = so.slug\n    LEFT JOIN last_ok lo ON lo.source_id = so.id\n),\nj AS (\n  SELECT s.*, CASE basis WHEN 'poll' THEN poll_age ELSE age END AS judged_age FROM s\n)\nSELECT j.*,\n       CASE WHEN NOT enabled THEN 'disabled'\n            WHEN section = 'manual' THEN 'manual'\n            WHEN judged_age IS NULL OR judged_age > late_s THEN 'problem'\n            WHEN judged_age > ok_s THEN 'late'\n            ELSE 'OK' END AS status,\n       CASE WHEN NOT enabled THEN 4\n            WHEN section = 'manual' THEN 3\n            WHEN judged_age IS NULL OR judged_age > late_s THEN 0\n            WHEN judged_age > ok_s THEN 1\n            ELSE 2 END AS rank\n  FROM j",
+          "value": "WITH expect(k, section, basis, ok_s, late_s, expected, hint) AS (VALUES\n  ('eagle',                     'live',      'sample',    120,    900, 'pushed every ~10 s', 'Device off the network, or the server stopped'),\n  ('envoy',                     'live',      'sample',    300,   1800, 'every minute, zeros at night', 'Device off the network, or the server stopped'),\n  ('navien',                    'live',      'sample',    300,   1800, 'every minute', 'Device off the network, or the server stopped'),\n  ('studio',                    'live',      'sample',    300,   1800, 'every minute', 'Device off the network, or the server stopped'),\n  ('closet',                    'live',      'sample',    300,   1800, 'every minute', 'Device off the network, or the server stopped'),\n  ('solaredge',                 'scheduled', 'poll',     2700,  10800, '15-min blocks, daylight only', 'SolarEdge portal login or outage'),\n  ('hottub_est',                'scheduled', 'poll',     2700,  10800, 'only during a soak', 'Estimator failing; check the meters it reads'),\n  ('tesla/ev_charge_power_w',   'scheduled', 'sample',   7200,  21600, '30 min, 5 when charging', 'Monthly API budget spent, car offline, or token (manage.py tesla_auth)'),\n  ('tesla/ev_charge_energy_wh', 'scheduled', 'poll',     7200,  21600, 'only while the car is awake', 'Monthly API budget spent, car offline, or token (manage.py tesla_auth)'),\n  ('pge_gas',                   'scheduled', 'sample', 345600, 604800, 'daily, 1-3 days behind', 'PG&E sign-in expired: run manage.py pge_auth'),\n  ('eagle/grid_import_wh',      'manual',    'none',     NULL,   NULL, 'Green Button CSV, by hand', NULL),\n  ('eagle/grid_export_wh',      'manual',    'none',     NULL,   NULL, 'Green Button CSV, by hand', NULL)\n),\nlast_ok AS (\n  SELECT source_id, MAX(started) AS t FROM core_collectorrun WHERE ok = 1 GROUP BY source_id\n),\ns AS (\n  SELECT se.id AS series_id,\n         so.id AS source_id,\n         so.slug || '/' || se.metric AS series,\n         so.enabled AS enabled,\n         COALESCE(e1.section, e2.section, 'live') AS section,\n         COALESCE(e1.basis, e2.basis, 'sample') AS basis,\n         COALESCE(e1.ok_s, e2.ok_s, 300) AS ok_s,\n         COALESCE(e1.late_s, e2.late_s, 1800) AS late_s,\n         COALESCE(e1.expected, e2.expected, 'no expectation set; judged as every minute') AS expected,\n         COALESCE(e1.hint, e2.hint, 'Check Failed polls for this source') AS hint,\n         lo.t AS last_poll_ts,\n         strftime('%s', 'now') - strftime('%s', (SELECT MAX(ts) FROM core_sample WHERE series_id = se.id)) AS age,\n         CAST(strftime('%s', (SELECT MAX(ts) FROM core_sample WHERE series_id = se.id)) AS INTEGER) AS last_sample,\n         strftime('%s', 'now') - strftime('%s', lo.t) AS poll_age,\n         CAST(strftime('%s', lo.t) AS INTEGER) AS last_poll\n    FROM core_series se\n    JOIN core_source so ON so.id = se.source_id\n    LEFT JOIN expect e1 ON e1.k = so.slug || '/' || se.metric\n    LEFT JOIN expect e2 ON e2.k = so.slug\n    LEFT JOIN last_ok lo ON lo.source_id = so.id\n),\nj AS (\n  SELECT s.*, CASE basis WHEN 'poll' THEN poll_age ELSE age END AS judged_age FROM s\n)\nSELECT j.*,\n       CASE WHEN NOT enabled THEN 'disabled'\n            WHEN section = 'manual' THEN 'manual'\n            WHEN judged_age IS NULL OR judged_age > late_s THEN 'problem'\n            WHEN judged_age > ok_s THEN 'late'\n            ELSE 'OK' END AS status,\n       CASE WHEN NOT enabled THEN 4\n            WHEN section = 'manual' THEN 3\n            WHEN judged_age IS NULL OR judged_age > late_s THEN 0\n            WHEN judged_age > ok_s THEN 1\n            ELSE 2 END AS rank\n  FROM j"
         },
         "options": []
       }
@@ -62,14 +62,14 @@
       "title": "",
       "transparent": true,
       "gridPos": {
-        "h": 7,
+        "h": 8,
         "w": 14,
         "x": 0,
         "y": 1
       },
       "options": {
         "mode": "markdown",
-        "content": "Each series is judged against what is normal **for its source**: a five-minute-old\nreading is late for the Eagle, but a three-day-old reading is on time for PG&E gas.\n\n- **OK**: within the source's normal delay.\n- **late**: longer than usual. Usually a blip (Wi-Fi drop, slow vendor portal);\n  look again in an hour.\n- **problem**: well past normal. Something needs a look; start with\n  *Failed polls* at the bottom of the page.\n- **manual**: updates only when you import a file, so its age is expected."
+        "content": "Each series is judged against what is normal **for its source**: a five-minute-old\nreading is late for the Eagle, but a three-day-old reading is on time for PG&E gas.\n\n- **OK**: within the source's normal delay.\n- **late**: longer than usual. Usually a blip (Wi-Fi drop, slow vendor portal);\n  look again in an hour.\n- **problem**: well past normal. Something needs a look.\n\n- **manual**: updates only when you import a file, so its age is expected.\n\nAnything late or a problem is listed in **Needs attention** below, with the\ncollector's latest error and what to check."
       }
     },
     {
@@ -78,7 +78,7 @@
       "title": "Series by status",
       "description": "Counts across every collected series (manual imports excluded).",
       "gridPos": {
-        "h": 7,
+        "h": 8,
         "w": 10,
         "x": 14,
         "y": 1
@@ -204,6 +204,220 @@
       }
     },
     {
+      "type": "table",
+      "id": 103,
+      "title": "Needs attention",
+      "description": "Every series that is late or a problem, worst first. Click the error for all failed polls, or the section for its full table.",
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "homepower-sqlite"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "homepower-sqlite"
+          },
+          "queryType": "table",
+          "timeColumns": [],
+          "rawQueryText": "SELECT series AS \"series\",\n       status AS \"status\",\n       judged_age AS \"silent for\",\n       expected AS \"normal\",\n       COALESCE(\n         (SELECT r.message FROM core_collectorrun r\n           WHERE r.source_id = h.source_id AND r.ok IS NOT 1\n             AND r.started > COALESCE(h.last_poll_ts, '')\n           ORDER BY r.started DESC LIMIT 1),\n         CASE WHEN h.last_poll_ts IS NULL THEN 'no successful poll on record'\n              WHEN h.poll_age > h.late_s THEN 'no polls at all: is the server running?'\n              ELSE 'polls succeed but bring no new data' END) AS \"latest error\",\n       hint AS \"what to check\",\n       CASE section WHEN 'live' THEN 'Live meters' ELSE 'Scheduled' END AS \"section\",\n       CASE section WHEN 'live' THEN 112 ELSE 122 END AS \"panel\",\n       rank AS \"rank\"\nFROM (${health}) AS h\nWHERE status IN ('problem', 'late')\nUNION ALL\nSELECT 'nothing late', 'OK', NULL, NULL, NULL, 'Every series is within its normal delay', NULL, NULL, 9\nWHERE NOT EXISTS (SELECT 1 FROM (${health}) WHERE status IN ('problem', 'late'))\nORDER BY rank, series",
+          "queryText": "SELECT series AS \"series\",\n       status AS \"status\",\n       judged_age AS \"silent for\",\n       expected AS \"normal\",\n       COALESCE(\n         (SELECT r.message FROM core_collectorrun r\n           WHERE r.source_id = h.source_id AND r.ok IS NOT 1\n             AND r.started > COALESCE(h.last_poll_ts, '')\n           ORDER BY r.started DESC LIMIT 1),\n         CASE WHEN h.last_poll_ts IS NULL THEN 'no successful poll on record'\n              WHEN h.poll_age > h.late_s THEN 'no polls at all: is the server running?'\n              ELSE 'polls succeed but bring no new data' END) AS \"latest error\",\n       hint AS \"what to check\",\n       CASE section WHEN 'live' THEN 'Live meters' ELSE 'Scheduled' END AS \"section\",\n       CASE section WHEN 'live' THEN 112 ELSE 122 END AS \"panel\",\n       rank AS \"rank\"\nFROM (${health}) AS h\nWHERE status IN ('problem', 'late')\nUNION ALL\nSELECT 'nothing late', 'OK', NULL, NULL, NULL, 'Every series is within its normal delay', NULL, NULL, 9\nWHERE NOT EXISTS (SELECT 1 FROM (${health}) WHERE status IN ('problem', 'late'))\nORDER BY rank, series"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "panel": true,
+              "rank": true
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "OK": {
+                        "text": "OK",
+                        "color": "#3D8A62",
+                        "index": 0
+                      },
+                      "late": {
+                        "text": "late",
+                        "color": "#D08E2C",
+                        "index": 1
+                      },
+                      "problem": {
+                        "text": "problem",
+                        "color": "#C4463A",
+                        "index": 2
+                      },
+                      "manual": {
+                        "text": "manual",
+                        "color": "#4A7FB5",
+                        "index": 3
+                      },
+                      "disabled": {
+                        "text": "disabled",
+                        "color": "#7A7F87",
+                        "index": 4
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              },
+              {
+                "id": "custom.align",
+                "value": "center"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "series"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 220
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "silent for"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              },
+              {
+                "id": "noValue",
+                "value": ""
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "normal"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 200
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "what to check"
+            },
+            "properties": [
+              {
+                "id": "custom.wrapText",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "latest error"
+            },
+            "properties": [
+              {
+                "id": "custom.wrapText",
+                "value": true
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "All failed polls",
+                    "url": "/grafana/d/homepower-health/data-health?${__url_time_range}&viewPanel=panel-4"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "section"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open this section's table",
+                    "url": "/grafana/d/homepower-health/data-health?${__url_time_range}&viewPanel=panel-${__data.fields.panel}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "type": "row",
       "id": 110,
       "title": "Live meters: should always be minutes old",
@@ -213,7 +427,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 8
+        "y": 16
       }
     },
     {
@@ -225,7 +439,7 @@
         "h": 12,
         "w": 8,
         "x": 0,
-        "y": 9
+        "y": 17
       },
       "options": {
         "mode": "markdown",
@@ -241,7 +455,7 @@
         "h": 12,
         "w": 16,
         "x": 8,
-        "y": 9
+        "y": 17
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -441,7 +655,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 21
+        "y": 29
       }
     },
     {
@@ -453,7 +667,7 @@
         "h": 9,
         "w": 8,
         "x": 0,
-        "y": 22
+        "y": 30
       },
       "options": {
         "mode": "markdown",
@@ -469,7 +683,7 @@
         "h": 9,
         "w": 16,
         "x": 8,
-        "y": 22
+        "y": 30
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -634,7 +848,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 31
+        "y": 39
       }
     },
     {
@@ -646,7 +860,7 @@
         "h": 5,
         "w": 8,
         "x": 0,
-        "y": 32
+        "y": 40
       },
       "options": {
         "mode": "markdown",
@@ -662,7 +876,7 @@
         "h": 5,
         "w": 16,
         "x": 8,
-        "y": 32
+        "y": 40
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -806,7 +1020,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 37
+        "y": 45
       }
     },
     {
@@ -818,7 +1032,7 @@
         "h": 3,
         "w": 24,
         "x": 0,
-        "y": 38
+        "y": 46
       },
       "options": {
         "mode": "markdown",
@@ -834,7 +1048,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 41
+        "y": 49
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -928,7 +1142,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 49
+        "y": 57
       },
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -971,7 +1185,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 49
+        "y": 57
       },
       "datasource": {
         "type": "frser-sqlite-datasource",

@@ -135,7 +135,8 @@ state Grafana owns and git doesn't.
   range), summer baseline, and gas by month year over year. Daily
   readings, 1–2 days behind (PG&E's posting lag)
 - **Data Health** — every series judged OK / late / problem against what's
-  normal for its source, in sections: live meters (minutes old), scheduled
+  normal for its source. The top lists whatever is late or a problem with
+  its collector's latest error and what to check, then sections: live meters (minutes old), scheduled
   and event-driven sources (hours or days old is fine; some are judged by
   their last good poll), and manual Green Button imports (never late).
   Then poll outcomes and coverage spans. Each source's normal delay is the
