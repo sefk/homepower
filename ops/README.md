@@ -134,7 +134,13 @@ state Grafana owns and git doesn't.
 - **Gas** — therms over the range (daily, weekly or monthly bars by
   range), summer baseline, and gas by month year over year. Daily
   readings, 1–2 days behind (PG&E's posting lag)
-- **Data Health** — sample freshness, coverage percentage, poll outcomes
+- **Data Health** — every series judged OK / late / problem against what's
+  normal for its source, in sections: live meters (minutes old), scheduled
+  and event-driven sources (hours or days old is fine; some are judged by
+  their last good poll), and manual Green Button imports (never late).
+  Then poll outcomes and coverage spans. Each source's normal delay is the
+  `VALUES` list in the hidden `health` dashboard variable; a new source with
+  no entry there is held to the live-meter standard
 - **Energy** — kWh per hour and per local day, with the observed-time panel
   that says how much of each bucket was actually seen
 
